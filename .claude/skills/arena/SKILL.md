@@ -13,7 +13,9 @@ task, launch, report progress, and help the user compare and decide. Never re-im
 ## Ground rules
 
 - Every arena command is non-interactive and safe to run from Bash. Use `arena` from PATH. If it is
-  missing, fall back to `node <path-to-ccc-arena>/dist/arena.js` and tell the user to run `npm link`.
+  missing, ask the user to install the ccc-arena package globally (`npm install -g ccc-arena`
+  for a published release, or `npm install -g /path/to/ccc-arena-<version>.tgz` for a release archive)
+  and check that the npm global bin directory is in PATH.
 - Never edit files inside an arena worktree yourself and never `cd` into one to "help" a runner.
 - Never merge, cherry-pick, push, or delete branches on the user's behalf. Present branch names; the
   user integrates the winner. Cleaning is destructive: confirm first.

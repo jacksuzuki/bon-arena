@@ -24,10 +24,13 @@ import { inspectRepository } from "./git/repository.ts"
 import { resolveVerifyCommands } from "./verification/detect.ts"
 import { loadConfig } from "./config.ts"
 import { sessionFile } from "./paths.ts"
+import { installSkill } from "./install.ts"
 
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
 
 Usage:
+  arena install-skill [--force] [--config-dir <path>]
+                                                    Install the Claude Code /arena skill (no repository required)
   arena doctor [--repo <path>]                      Check runner availability and detected verify commands
   arena start --task <text>|--task-file <f> [--players claude,codex] [--repo <path>]
                                                     Create session + worktrees, launch runners, return immediately
@@ -104,6 +107,19 @@ function sessionArg(positionals: string[], index = 0): string {
 
 function jsonOut(session: Session): void {
   print(JSON.stringify(session, null, 2))
+}
+
+function cmdInstallSkill(argv: Argv): void {
+  const { values } = parseArgs({
+    args: argv,
+    options: { force: { type: "boolean" }, "config-dir": { type: "string" }, help: { type: "boolean", short: "h" } },
+  })
+  if (values.help) {
+    print("Usage: arena install-skill [--force] [--config-dir <path>]\n\nCopies the bundled /arena skill to <config-dir>/skills/arena/SKILL.md.\nDefault: CLAUDE_CONFIG_DIR or ~/.claude. Existing custom skills require --force.")
+    return
+  }
+  const result = installSkill({ configDir: values["config-dir"], force: values.force })
+  print(`${result.changed ? "Installed" : "Already installed"}: ${result.path}\nRestart Claude Code to use /arena.`)
 }
 
 async function cmdDoctor(argv: Argv): Promise<void> {
@@ -392,6 +408,8 @@ async function main(): Promise<void> {
       case "help":
         print(HELP)
         return
+      case "install-skill":
+        return cmdInstallSkill(rest)
       case "doctor":
         return await cmdDoctor(rest)
       case "start":
