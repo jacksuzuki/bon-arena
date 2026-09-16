@@ -1,0 +1,437 @@
+#!/usr/bin/env node
+/**
+ * Arena CLI — thin, non-interactive command surface over Arena Core.
+ * Hosts (the Claude Code /arena skill, other harnesses, humans) drive it with subcommands.
+ */
+import { readFileSync, existsSync } from "node:fs"
+import { parseArgs } from "node:util"
+import { resolve } from "node:path"
+import {
+  checkRunners,
+  cleanArena,
+  collectResults,
+  commitCandidate,
+  isSessionActive,
+  refreshSession,
+  selectCandidate,
+  startArena,
+  stopArena,
+  waitForArena,
+} from "./core.ts"
+import { renderCompareBundle, renderStatus, renderSummary, formatDuration, playerDurationMs } from "./compare/summary.ts"
+import { findPlayer, listSessions, resolveSessionId, type Session } from "./session.ts"
+import { inspectRepository } from "./git/repository.ts"
+import { resolveVerifyCommands } from "./verification/detect.ts"
+import { loadConfig } from "./config.ts"
+import { sessionFile } from "./paths.ts"
+
+const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
+
+Usage:
+  arena doctor [--repo <path>]                      Check runner availability and detected verify commands
+  arena start --task <text>|--task-file <f> [--players claude,codex] [--repo <path>]
+                                                    Create session + worktrees, launch runners, return immediately
+  arena status <id|latest> [--json]                 Show runner progress
+  arena wait <id|latest> [--timeout <sec>] [--json] Block until every runner finishes
+  arena stop <id|latest>                            Terminate running runners
+  arena collect <id|latest> [--no-verify] [--player <p>] [--test <cmd>] [--lint <cmd>] [--typecheck <cmd>]
+                                                    Collect diff stats and run test/lint/typecheck per candidate
+  arena summary <id|latest> [--json]                Print the comparison table
+  arena compare <id|latest> [--max-diff-bytes <n>]  Print the markdown review bundle for an LLM/human reviewer
+  arena diff <id|latest> <player>                   Print a candidate's diff
+  arena logs <id|latest> <player> [--stderr]        Print a runner's output log
+  arena select <id|latest> <player|none>            Record the adopted candidate and print its branch
+  arena commit <id|latest> <player> [-m <msg>]      Commit the candidate worktree onto its branch
+  arena run --task <text> [--players ...]           start + wait + collect + summary (foreground, Ctrl+C stops runners)
+  arena list [--json]                               List sessions
+  arena inspect <id|latest>                         Print the session JSON
+  arena clean <id|latest> [--keep-branches] [--force]
+                                                    Remove worktrees (and branches); --force also deletes logs/session dir
+
+Common options:
+  --test/--lint/--typecheck <cmd|false>  Override verification commands (false disables)
+  --json                                 Machine-readable output
+  --repo <path>                          Repository (default: cwd)
+`
+
+type Argv = string[]
+
+function fail(msg: string, code = 1): never {
+  process.stderr.write(`error: ${msg}\n`)
+  process.exit(code)
+}
+
+function print(s: string): void {
+  process.stdout.write(s.endsWith("\n") ? s : s + "\n")
+}
+
+function verifyOverridesFrom(values: Record<string, unknown>): { test?: string | false; lint?: string | false; typecheck?: string | false } | undefined {
+  const out: Record<string, string | false> = {}
+  for (const k of ["test", "lint", "typecheck"]) {
+    const v = values[k]
+    if (typeof v === "string") out[k] = v === "false" || v === "" ? false : v
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+function readTask(values: { task?: string; "task-file"?: string }, positionals: string[]): string {
+  if (values["task-file"]) {
+    const p = resolve(values["task-file"])
+    if (!existsSync(p)) fail(`task file not found: ${p}`)
+    return readFileSync(p, "utf8")
+  }
+  if (values.task) return values.task
+  if (positionals.length) return positionals.join(" ")
+  if (!process.stdin.isTTY) {
+    const buf = readFileSync(0, "utf8")
+    if (buf.trim()) return buf
+  }
+  return fail("task is required (--task, --task-file, positional text, or stdin)")
+}
+
+function parsePlayers(v: string | undefined): string[] {
+  return (v ?? "claude,codex")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function sessionArg(positionals: string[], index = 0): string {
+  const ref = positionals[index]
+  if (!ref) fail("session id required (or 'latest')")
+  return resolveSessionId(ref)
+}
+
+function jsonOut(session: Session): void {
+  print(JSON.stringify(session, null, 2))
+}
+
+async function cmdDoctor(argv: Argv): Promise<void> {
+  const { values } = parseArgs({ args: argv, options: { repo: { type: "string" }, json: { type: "boolean" } } })
+  const repoPath = resolve(values.repo ?? process.cwd())
+  let repoInfo: ReturnType<typeof inspectRepository> | null = null
+  let repoError: string | null = null
+  try {
+    repoInfo = inspectRepository(repoPath)
+  } catch (err) {
+    repoError = (err as Error).message
+  }
+  const root = repoInfo?.root ?? repoPath
+  const runners = await checkRunners(root)
+  const verify = repoInfo ? resolveVerifyCommands(root, loadConfig(root).verify) : {}
+  if (values.json) {
+    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify }, null, 2))
+    return
+  }
+  print("Arena doctor")
+  print("")
+  if (repoInfo) {
+    print(`repository   ${repoInfo.root}`)
+    print(`branch       ${repoInfo.branch ?? "(detached)"} @ ${repoInfo.headCommit.slice(0, 12)}${repoInfo.dirty ? "  (uncommitted changes)" : ""}`)
+  } else {
+    print(`repository   ${repoError}`)
+  }
+  print("")
+  print("runners")
+  for (const r of runners) print(`  ${r.id.padEnd(10)} ${r.available ? "✓" : "✗"} ${r.command}${r.available ? "" : "  (not found in PATH)"}`)
+  print("")
+  print("verification")
+  for (const k of ["test", "lint", "typecheck"] as const) print(`  ${k.padEnd(10)} ${verify[k] ?? "(none)"}`)
+  const missing = runners.filter((r) => !r.available && (r.id === "claude" || r.id === "codex"))
+  if (missing.length) process.exitCode = 1
+}
+
+async function cmdStart(argv: Argv): Promise<Session> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      task: { type: "string", short: "t" },
+      "task-file": { type: "string" },
+      players: { type: "string", short: "p" },
+      repo: { type: "string" },
+      test: { type: "string" },
+      lint: { type: "string" },
+      typecheck: { type: "string" },
+      json: { type: "boolean" },
+    },
+  })
+  const task = readTask(values, positionals)
+  const session = await startArena({
+    repo: resolve(values.repo ?? process.cwd()),
+    task,
+    players: parsePlayers(values.players),
+    verify: verifyOverridesFrom(values),
+    log: (l) => process.stderr.write(`${l}\n`),
+  })
+  if (values.json) {
+    jsonOut(session)
+  } else {
+    print(`Arena ${session.id} started`)
+    print(`base     ${session.baseCommit.slice(0, 12)}${session.baseBranch ? ` (${session.baseBranch})` : ""}`)
+    for (const p of session.players) print(`${p.label.padEnd(8)} ${p.branch}  ${p.worktree}`)
+    print(`\nNext: arena wait ${session.id}`)
+  }
+  return session
+}
+
+function cmdStatus(argv: Argv): void {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } })
+  const session = refreshSession(sessionArg(positionals))
+  if (values.json) jsonOut(session)
+  else print(renderStatus(session))
+}
+
+async function cmdWait(argv: Argv): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: { json: { type: "boolean" }, timeout: { type: "string" }, interval: { type: "string" }, quiet: { type: "boolean" } },
+  })
+  const id = sessionArg(positionals)
+  const session = await waitProgress(id, values.timeout ? Number(values.timeout) * 1000 : undefined, values.quiet ? undefined : (values.interval ? Number(values.interval) : 30) * 1000, false)
+  if (values.json) jsonOut(session)
+  else print(renderStatus(session))
+}
+
+/** Wait, printing a progress line every `progressEveryMs` (stderr) so long waits stay observable. */
+async function waitProgress(id: string, timeoutMs: number | undefined, progressEveryMs: number | undefined, stopOnSigint: boolean): Promise<Session> {
+  const controller = new AbortController()
+  let interrupted = false
+  const onSigint = () => {
+    interrupted = true
+    controller.abort()
+  }
+  if (stopOnSigint) process.on("SIGINT", onSigint)
+  let lastPrint = 0
+  const session = await waitForArena(id, {
+    timeoutMs,
+    signal: controller.signal,
+    onTick: (s) => {
+      const now = Date.now()
+      if (progressEveryMs && (now - lastPrint >= progressEveryMs || !isSessionActive(s))) {
+        lastPrint = now
+        const line = s.players.map((p) => `${p.label} ${p.status} ${formatDuration(playerDurationMs(p, now))}`).join(" | ")
+        process.stderr.write(`[arena ${s.id}] ${line}\n`)
+      }
+    },
+  })
+  if (stopOnSigint) process.off("SIGINT", onSigint)
+  if (interrupted) {
+    process.stderr.write("\nstopping runners...\n")
+    return stopArena(id)
+  }
+  return session
+}
+
+function cmdStop(argv: Argv): void {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } })
+  const session = stopArena(sessionArg(positionals))
+  if (values.json) jsonOut(session)
+  else print(renderStatus(session))
+}
+
+async function cmdCollect(argv: Argv): Promise<Session> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      json: { type: "boolean" },
+      "no-verify": { type: "boolean" },
+      player: { type: "string", multiple: true },
+      test: { type: "string" },
+      lint: { type: "string" },
+      typecheck: { type: "string" },
+      timeout: { type: "string" },
+    },
+  })
+  const id = sessionArg(positionals)
+  const session = await collectResults(id, {
+    players: values.player,
+    verify: verifyOverridesFrom(values),
+    skipVerification: values["no-verify"],
+    timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
+    log: (l) => process.stderr.write(`${l}\n`),
+  })
+  if (values.json) jsonOut(session)
+  else print(renderSummary(session))
+  return session
+}
+
+function cmdSummary(argv: Argv): void {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } })
+  const session = refreshSession(sessionArg(positionals))
+  if (values.json) jsonOut(session)
+  else print(renderSummary(session))
+}
+
+function cmdCompare(argv: Argv): void {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: { "max-diff-bytes": { type: "string" }, "no-logs": { type: "boolean" } },
+  })
+  const session = refreshSession(sessionArg(positionals))
+  print(renderCompareBundle(session, { maxDiffBytes: values["max-diff-bytes"] ? Number(values["max-diff-bytes"]) : undefined, includeFailureLogs: !values["no-logs"] }))
+}
+
+function cmdDiff(argv: Argv): void {
+  const { positionals } = parseArgs({ args: argv, allowPositionals: true, options: {} })
+  const session = refreshSession(sessionArg(positionals))
+  const ref = positionals[1]
+  if (!ref) fail("player required")
+  const player = findPlayer(session, ref)
+  if (!player.result) fail(`results not collected for ${player.id}; run: arena collect ${session.id}`)
+  process.stdout.write(readFileSync(player.result.git.diffPath, "utf8"))
+}
+
+function cmdLogs(argv: Argv): void {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { stderr: { type: "boolean" }, tail: { type: "string" } } })
+  const session = refreshSession(sessionArg(positionals))
+  const ref = positionals[1]
+  if (!ref) fail("player required")
+  const player = findPlayer(session, ref)
+  const path = values.stderr ? player.stderrPath : player.stdoutPath
+  if (!existsSync(path)) fail(`no log at ${path}`)
+  let text = readFileSync(path, "utf8")
+  if (values.tail) text = text.split("\n").slice(-Number(values.tail)).join("\n")
+  process.stdout.write(text)
+}
+
+function cmdSelect(argv: Argv): void {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } })
+  const id = sessionArg(positionals)
+  const ref = positionals[1]
+  if (!ref) fail("player required (or 'none')")
+  const session = selectCandidate(id, ref.toLowerCase() === "none" ? null : ref)
+  if (values.json) {
+    jsonOut(session)
+    return
+  }
+  if (!session.selected) {
+    print("Selected: none")
+    return
+  }
+  const p = findPlayer(session, session.selected)
+  print(`Selected: ${p.label}\n\nBranch:\n${p.branch}\n\nWorktree:\n${p.worktree}\n`)
+  const uncommitted = p.result ? p.result.git.changedFiles > 0 && p.result.git.commits === 0 : true
+  if (uncommitted) print(`Changes are in the worktree only. To make the branch self-contained:\n  arena commit ${session.id} ${p.id}`)
+  print(`Then bring it into your branch manually, e.g.:\n  git merge ${p.branch}   # or: git cherry-pick / git diff ${session.baseCommit.slice(0, 12)} ${p.branch} | git apply`)
+}
+
+function cmdCommit(argv: Argv): void {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { message: { type: "string", short: "m" } } })
+  const id = sessionArg(positionals)
+  const ref = positionals[1]
+  if (!ref) fail("player required")
+  const r = commitCandidate(id, ref, values.message)
+  print(r.committed ? `Committed ${r.player.label} candidate as ${r.commit?.slice(0, 12)} on ${r.player.branch}` : `Nothing to commit for ${r.player.label} (HEAD ${r.commit?.slice(0, 12)})`)
+}
+
+function cmdList(argv: Argv): void {
+  const { values } = parseArgs({ args: argv, options: { json: { type: "boolean" }, all: { type: "boolean" } } })
+  let sessions = listSessions()
+  if (!values.all) sessions = sessions.filter((s) => s.status !== "cleaned")
+  if (values.json) {
+    print(JSON.stringify(sessions, null, 2))
+    return
+  }
+  if (!sessions.length) {
+    print("No arena sessions." + (values.all ? "" : " (use --all to include cleaned)"))
+    return
+  }
+  for (const s of sessions) {
+    const players = s.players.map((p) => `${p.label}:${p.status}`).join(" ")
+    print(`${s.id}  ${s.status.padEnd(9)}  ${s.projectName.padEnd(16)}  ${players}\n    ${s.task.split("\n")[0]?.slice(0, 100)}`)
+  }
+}
+
+function cmdInspect(argv: Argv): void {
+  const { positionals } = parseArgs({ args: argv, allowPositionals: true, options: {} })
+  const id = sessionArg(positionals)
+  process.stderr.write(`${sessionFile(id)}\n`)
+  jsonOut(refreshSession(id))
+}
+
+function cmdClean(argv: Argv): void {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: { "keep-branches": { type: "boolean" }, force: { type: "boolean" }, json: { type: "boolean" } },
+  })
+  const session = cleanArena(sessionArg(positionals), {
+    deleteBranches: !values["keep-branches"],
+    force: values.force,
+    log: (l) => process.stderr.write(`${l}\n`),
+  })
+  if (values.json) jsonOut(session)
+  else print(`Arena ${session.id} cleaned`)
+}
+
+async function cmdRun(argv: Argv): Promise<void> {
+  const session = await cmdStart(argv.filter((a) => a !== "--json"))
+  process.stderr.write("\n")
+  const waited = await waitProgress(session.id, undefined, 15_000, true)
+  if (waited.status === "stopped") {
+    print(renderStatus(waited))
+    return
+  }
+  const collected = await collectResults(session.id, { log: (l) => process.stderr.write(`${l}\n`) })
+  process.stderr.write("\n")
+  print(renderSummary(collected))
+  print(`\nNext: arena compare ${session.id} | arena select ${session.id} <player> | arena clean ${session.id}`)
+}
+
+async function main(): Promise<void> {
+  const [cmd, ...rest] = process.argv.slice(2)
+  try {
+    switch (cmd) {
+      case undefined:
+      case "-h":
+      case "--help":
+      case "help":
+        print(HELP)
+        return
+      case "doctor":
+        return await cmdDoctor(rest)
+      case "start":
+        await cmdStart(rest)
+        return
+      case "status":
+        return cmdStatus(rest)
+      case "wait":
+        return await cmdWait(rest)
+      case "stop":
+        return cmdStop(rest)
+      case "collect":
+        await cmdCollect(rest)
+        return
+      case "summary":
+        return cmdSummary(rest)
+      case "compare":
+        return cmdCompare(rest)
+      case "diff":
+        return cmdDiff(rest)
+      case "logs":
+        return cmdLogs(rest)
+      case "select":
+        return cmdSelect(rest)
+      case "commit":
+        return cmdCommit(rest)
+      case "list":
+        return cmdList(rest)
+      case "inspect":
+        return cmdInspect(rest)
+      case "clean":
+        return cmdClean(rest)
+      case "run":
+        return await cmdRun(rest)
+      default:
+        fail(`unknown command "${cmd}"\n\n${HELP}`, 2)
+    }
+  } catch (err) {
+    fail((err as Error).message)
+  }
+}
+
+await main()

@@ -1,0 +1,33 @@
+{
+  "name": "ccc-arena",
+  "version": "0.1.0",
+  "description": "Run multiple coding agents (Claude Code, Codex CLI, ...) on the same task in isolated git worktrees and compare the results.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "arena": "./dist/arena.js"
+  },
+  "files": [
+    "dist",
+    ".claude/skills",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node src/arena.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.ts",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "^7.0.2"
+  }
+}
