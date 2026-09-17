@@ -226,10 +226,10 @@ runner の隔離はそのまま機能し、`orca` CLI が無い・失敗した�
 | Runner | 起動コマンド |
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'`（プロンプトは stdin） |
-| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c sandbox_workspace_write.network_access=true -c approval_policy="never" -o <results>/codex.last-message.md -` |
 | Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
-ヘッドレス実行では権限の確認に答えられないため、Claude は権限チェックをスキップして動きます。隔離は権限システムではなく専用の worktree によるものです。各 runner は detached な supervisor プロセスに監視され、exit code が記録されるので、`arena` コマンドは終了してあとから戻れます（`arena wait`、`arena status`）。`arena stop` はプロセスグループ全体を終了します。
+ヘッドレス実行では権限の確認に答えられないため、Claude は権限チェックをスキップして動きます。隔離は権限システムではなく専用の worktree によるものです。Codex は `workspace-write` サンドボックス（書き込みは worktree 内に限定）のまま、ネットワークアクセスだけを有効にして動きます。無効のままだと localhost での `listen()` すら拒否され、他の runner のように dev サーバーを立てて自分の実装を確認できないためです。閉じたい場合は `codex` に `extraArgs: ["-c", "sandbox_workspace_write.network_access=false"]` を設定します。各 runner は detached な supervisor プロセスに監視され、exit code が記録されるので、`arena` コマンドは終了してあとから戻れます（`arena wait`、`arena status`）。`arena stop` はプロセスグループ全体を終了します。
 
 `agy` はプロセスのカレントディレクトリでは作業せず、stdin からプロンプトを読むこともできません。そのため worktree を `--add-dir` で、プロンプトを `-p=<prompt>` の 1 引数で渡します。print モードは既定で 5 分で打ち切られるので `--print-timeout` を明示し、会話 ID が出力に含まれる `stream-json` で起動します（runner のログはプレーンテキストではなく NDJSON になります）。
 

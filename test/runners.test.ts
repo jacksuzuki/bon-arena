@@ -50,6 +50,7 @@ test("built-in runners are headless and honour config", () => {
   assert.equal(codex.command, "/opt/codex")
   assert.equal(codex.args[0], "exec")
   assert.ok(codex.args.includes("workspace-write"))
+  assert.ok(codex.args.includes("sandbox_workspace_write.network_access=true"), "lets Codex start a local dev server")
   assert.equal(codex.args.at(-1), "-")
 })
 
