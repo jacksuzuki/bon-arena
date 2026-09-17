@@ -28,13 +28,13 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/mark-executable.mjs",
+    "prepare": "npm run build",
     "dev": "node src/arena.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/*.test.ts",
     "test:package": "npm run build && node scripts/test-package.mjs",
-    "prepublishOnly": "npm run typecheck && npm test && npm run test:package",
-    "check:dist": "npm run build && git diff --exit-code --stat dist"
+    "prepublishOnly": "npm run typecheck && npm test && npm run test:package"
   },
   "dependencies": {
     "yaml": "^2.9.1",

@@ -222,5 +222,7 @@ git check-ignore --no-index .env.example .env.test.example .claude/skills/arena/
    `npm install -g --install-links github:jacksuzuki/bon-arena`、`npx --package github:jacksuzuki/bon-arena arena …`、
    GitHub の archive tarball URL のいずれもビルド無しで動く。CI の `npm run check:dist` が `dist/` の陳腐化を
    検出する。2026-09-17 に `bon-arena@0.1.0` として npm に publish 済み（`npm install -g bon-arena` / `npx bon-arena`）。
+   **追記（0.4.0 以降）**: 配布は npm レジストリに一本化し、`dist/` のコミットをやめた（`.gitignore`）。`prepare` が
+   `npm ci` / `npm publish` 時にビルドする。GitHub からの直接インストールは案内しない。`check:dist` は廃止。
 8. ネットワークが使える環境で `npm run test:package` を完走させる。
 9. 最終変更をレビューし、公開対象の branch / tag とファイルを再走査してから push する。

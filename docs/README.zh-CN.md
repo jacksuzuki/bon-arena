@@ -44,15 +44,15 @@ npx bon-arena run --players claude,codex --task "为 API 添加限流"
 
 Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到 `npx bon-arena`，但全局安装更快，并且可以不经确认直接使用 `/arena`。
 
-### 从 GitHub 或 checkout 使用
+### 从 checkout 使用
 
-编译后的 CLI（`dist/`）已提交到仓库，因此从仓库安装也不需要构建步骤：`npm install -g --install-links github:jacksuzuki/bon-arena`（该参数是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink 并随即删除该克隆）或 `npx --package github:jacksuzuki/bon-arena arena doctor`。可用 `#v0.4.0` 固定版本。开发用：
+编译后的 CLI（`dist/`）是构建产物，不提交到仓库；`npm ci` 时会（通过 `prepare` 脚本）自动构建。正式版本请按上文从 npm 安装。开发用：
 
 ```bash
 git clone https://github.com/jacksuzuki/bon-arena.git
 cd bon-arena
-npm ci
-npm run build        # dist/ 已提交；修改 src/ 后需重新构建
+npm ci               # 安装依赖并构建 dist/
+npm run build        # 若已 link 此 checkout，修改 src/（或 pull）后需重新构建
 npm link             # 把这个 checkout 暴露为 arena 命令
 arena install-skill
 ```
@@ -272,7 +272,7 @@ src/
 
 ```bash
 npm ci
-npm run build                # dist/ 已提交：修改 src/ 后重新构建并一起提交
+npm run build                # dist/ 不纳入 git；link 的 checkout 运行的是 dist/，修改 src/ 后需重新构建
 npm link                     # 可选：把这个 checkout 暴露为 `arena`
 npm run typecheck
 npm test
@@ -290,11 +290,10 @@ npm ci
 npm run typecheck
 npm test
 npm run test:package
-npm run build
 npm pack                     # 生成 bon-arena-<version>.tgz
 ```
 
-发布流程：提升版本（`npm version patch|minor`），运行 `npm run build` 并提交 `dist/`，然后执行 `npm publish --access public --otp=<code>`（账号需启用 2FA），再 `git push --follow-tags`。`prepublishOnly` 钩子会先运行 typecheck、单元测试和包冒烟测试。本仓库不会自动发布。生成的 `.tgz` 也可以直接分享，用 `npm install -g ./bon-arena-<version>.tgz` 安装。
+发布流程：提升版本（`npm version patch|minor`），然后执行 `npm publish --access public --otp=<code>`（账号需启用 2FA），再 `git push --follow-tags`。`prepare` 钩子会把 `dist/` 构建进包中，`prepublishOnly` 钩子会先运行 typecheck、单元测试和包冒烟测试。本仓库不会自动发布。生成的 `.tgz` 也可以直接分享，用 `npm install -g ./bon-arena-<version>.tgz` 安装。
 
 ## v0.1 不包含
 

@@ -44,15 +44,15 @@ npx bon-arena run --players claude,codex --task "API にレート制限を追加
 
 Claude Code の skill は PATH 上の `arena` を呼び、無ければ `npx bon-arena` にフォールバックしますが、グローバルインストールの方が速く、`/arena` を確認なしで使えます。
 
-### GitHub や checkout から使う
+### checkout から使う
 
-コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/bon-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/bon-arena arena doctor` です。`#v0.4.0` でバージョンを固定できます。開発用:
+コンパイル済みの CLI（`dist/`）はビルド生成物で、コミットしていません。`npm ci` の時点で（`prepare` スクリプトにより）ビルドされます。リリース版は上記のとおり npm からインストールしてください。開発用:
 
 ```bash
 git clone https://github.com/jacksuzuki/bon-arena.git
 cd bon-arena
-npm ci
-npm run build        # dist/ はコミット対象。src/ を変えたら再ビルド
+npm ci               # 依存のインストールと dist/ のビルド
+npm run build        # checkout を link している場合、src/ を変えたら（pull したら）再ビルド
 npm link             # この checkout を arena コマンドとして公開
 arena install-skill
 ```
@@ -274,7 +274,7 @@ src/
 
 ```bash
 npm ci
-npm run build                # dist/ はコミット対象: src/ の変更と一緒に再ビルドしてコミット
+npm run build                # dist/ は git 管理外。link した checkout は dist/ を実行するので src/ 変更後に再ビルド
 npm link                     # 任意: この checkout を `arena` として公開
 npm run typecheck
 npm test
@@ -292,11 +292,10 @@ npm ci
 npm run typecheck
 npm test
 npm run test:package
-npm run build
 npm pack                     # bon-arena-<version>.tgz を生成
 ```
 
-リリース手順: バージョンを上げ（`npm version patch|minor`）、`npm run build` で `dist/` を再生成してコミットし、`npm publish --access public --otp=<code>`（アカウントは 2FA 必須）を実行してから `git push --follow-tags` します。`prepublishOnly` フックが先に typecheck、ユニットテスト、パッケージのスモークテストを実行します。このリポジトリは自動公開しません。生成した `.tgz` を直接配布して `npm install -g ./bon-arena-<version>.tgz` でインストールしてもらうこともできます。
+リリース手順: バージョンを上げ（`npm version patch|minor`）、`npm publish --access public --otp=<code>`（アカウントは 2FA 必須）を実行してから `git push --follow-tags` します。`prepare` フックが `dist/` をパッケージにビルドし、`prepublishOnly` フックが先に typecheck、ユニットテスト、パッケージのスモークテストを実行します。このリポジトリは自動公開しません。生成した `.tgz` を直接配布して `npm install -g ./bon-arena-<version>.tgz` でインストールしてもらうこともできます。
 
 ## v0.1 に含まれないもの
 

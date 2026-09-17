@@ -53,19 +53,16 @@ npx bon-arena run --players claude,codex --task "Add rate limiting"
 The Claude Code skill calls `arena` from PATH and falls back to `npx bon-arena` when it is
 missing, but the global install is faster and lets you use `/arena` without any prompt.
 
-### From GitHub or a checkout
+### From a checkout
 
-The compiled CLI (`dist/`) is committed, so the repository installs without a build step:
-`npm install -g --install-links github:jacksuzuki/bon-arena` (the flag matters: without it npm 10
-installs a git package as a symlink to a temporary clone that it deletes right away) or
-`npx --package github:jacksuzuki/bon-arena arena doctor`. Pin a version with `#v0.4.0`. For
-development:
+The compiled CLI (`dist/`) is build output and not committed; `npm ci` builds it (`prepare` script).
+Releases are installed from npm as shown above. For development:
 
 ```bash
 git clone https://github.com/jacksuzuki/bon-arena.git
 cd bon-arena
-npm ci
-npm run build        # dist/ is committed; rebuild after changing src/
+npm ci               # installs dependencies and builds dist/
+npm run build        # rebuild after changing src/ (or pulling) when the checkout is linked
 npm link             # expose this checkout as the arena command
 arena install-skill
 ```
@@ -376,7 +373,7 @@ src/
 
 ```bash
 npm ci
-npm run build                # dist/ is committed: rebuild and commit it with src/ changes
+npm run build                # dist/ is ignored by git; a linked checkout runs dist/, so rebuild after src/ changes
 npm link                     # optional: expose this checkout as `arena`
 npm run typecheck
 npm test
@@ -394,13 +391,13 @@ npm ci
 npm run typecheck
 npm test
 npm run test:package
-npm run build
 npm pack                     # produces bon-arena-<version>.tgz
 ```
 
-Release: bump the version (`npm version patch|minor`), run `npm run build` and commit `dist/`, then
+Release: bump the version (`npm version patch|minor`), then
 `npm publish --access public --otp=<code>` (the account requires 2FA) and `git push --follow-tags`.
-The `prepublishOnly` hook runs typecheck, unit tests and the package smoke test first. This
+The `prepare` hook builds `dist/` into the package, and `prepublishOnly` runs typecheck, unit tests
+and the package smoke test first. This
 repository does not publish automatically. The generated `.tgz` can also be shared directly and
 installed with `npm install -g ./bon-arena-<version>.tgz`.
 
