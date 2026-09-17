@@ -38,7 +38,7 @@ progress, and help the user compare and decide. Never re-implement Core logic.
 | `status [id]` | `arena status <id|latest>` and report. |
 | `list` | `arena list` and report. |
 | `resume <id>` / `wait <id>` | Continue from step 6 with that id. |
-| `compare <id>` | Jump to the Compare step. |
+| `compare <id>` | Jump to step 8 (compare, then "What next?"). |
 | `clean <id>` | Confirm, then `arena clean <id>`. |
 
 Mode keywords are recognised only as the leading token; a `simple` or `refine` inside the task text
@@ -169,43 +169,55 @@ It computes diff stats and runs test / lint / typecheck **independently of what 
 claimed**. Show its summary block verbatim in a fenced code block. If a runner status is `failed`,
 show the last lines of `arena logs <id> <player> --stderr --tail 40`.
 
-### 8. What next?
+### 8. Compare (always, right after collect)
 
-Ask with AskUserQuestion, in this order (the first option is the default):
+Do this before asking the user anything: they cannot decide between synthesizing and adopting a
+candidate as is without seeing the review.
 
-- **Synthesize (Recommended)** — compare, take the stronger candidate as the base, fold in the
-  other's strengths, and finish the implementation yourself
-- Compare only (review, then let the user pick a candidate as is)
-- Inspect <Player 1> diff
-- Inspect <Player 2> diff
+Run `arena compare <id>` and review the bundle it prints. Judge both candidates on: correctness,
+task completeness, regression risk, architecture fit, code complexity, adherence to existing
+conventions, test quality, unnecessary changes. In refined mode the bundle contains both the
+specification and the original request: judge completeness against the specification, and check
+that the result still serves the original request. Do not trust the runners' own claims: read files
+inside the worktrees (read-only) and, when a claim matters (e.g. "installs cleanly", "works after
+X"), actually try it on a copy of the worktree in a temp dir.
 
-Mention that "Keep both" and "Clean arena" are also available if the user asks.
+Present a concise comparison to the user:
 
-**Compare** (used by both of the first two options): run `arena compare <id>` and review the
-bundle it prints. Judge both candidates on: correctness, task completeness, regression risk,
-architecture fit, code complexity, adherence to existing conventions, test quality, unnecessary
-changes. In refined mode the bundle contains both the specification and the original request:
-judge completeness against the specification, and check that the result still serves the original
-request. Do not trust the runners' own claims: read files inside the worktrees (read-only) and,
-when a claim matters (e.g. "installs cleanly", "works after X"), actually try it on a copy of the
-worktree in a temp dir. Write a concise comparison: a short table of facts, per criterion which
-candidate is stronger and why, then name the recommended base **and list the concrete strengths of
-the other candidate worth folding in** (specific files, functions, tests, docs).
+1. a short table of facts (duration, files, diff size, verification results, approach in one line);
+2. per criterion, which candidate is stronger and why, including any defect you found;
+3. the recommended base, **the concrete strengths of the other candidate worth folding in**
+   (specific files, functions, tests, docs), and whether a plain adoption would already be good
+   enough or synthesis adds real value.
 
-**Compare only**: after the comparison ask "Select candidate?" with <Player 1> / <Player 2> / None,
-then go to step 10.
+### 9. What next?
 
-**Inspect diff**: run `arena diff <id> <player>` and walk the user through it, then return to this
-question.
+Only now ask with AskUserQuestion, in this order (the first option is the default):
+
+- **Synthesize (Recommended)** — base on <recommended>, fold in <other>'s strengths listed above,
+  and finish the implementation yourself
+- Adopt <recommended> as is
+- Adopt <other> as is
+- Inspect a diff (then return to this question)
+
+Mention that "Keep both" and "Clean arena" are also available if the user asks. If the comparison
+showed that one candidate is clearly complete and the other adds nothing worth porting, say so and
+still list Synthesize first, but note that adopting as is would be a fine choice.
+
+**Adopt as is**: `arena select <id> <player>`, relay its output, then go to step 11.
+
+**Inspect a diff**: ask which player, run `arena diff <id> <player>` and walk the user through it,
+then ask this question again.
 
 **Keep both**: print both branch names and worktree paths and stop.
 
 **Clean arena**: confirm ("removes worktrees and unselected branches"), then `arena clean <id>`.
 
-### 9. Synthesize
+### 10. Synthesize
 
-1. After the comparison, confirm the base with AskUserQuestion: "Base candidate?" — recommended
-   candidate first, the other second, "Stop here" third.
+1. The base is the recommended candidate from step 8 unless the user named another one when
+   choosing Synthesize; if their answer suggests a different base, confirm with AskUserQuestion:
+   "Base candidate?" — recommended first, the other second, "Stop here" third.
 2. Run `arena synthesize <id> <base>`. It snapshots the base candidate onto its branch, selects it,
    and prints a brief with the other candidate's diff. Relay the worktree path and the list of
    strengths you are about to fold in.
@@ -219,9 +231,9 @@ question.
 5. Commit with `arena commit <id> <base> -m "arena(<id>): synthesis — <one line>"` and run
    `arena finish <id>`.
 6. Summarize what the final version contains: what came from the base, what was folded in from
-   the other candidate, what you changed yourself. Then go to step 10.
+   the other candidate, what you changed yourself. Then go to step 11.
 
-### 10. Integrate
+### 11. Integrate
 
 Ask with AskUserQuestion: "Merge into <base branch> now?" with options
 "Merge (arena adopt)" / "Squash merge" / "Not now, keep the branch".

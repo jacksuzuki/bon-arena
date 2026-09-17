@@ -94,11 +94,13 @@ default for a repository, and `/arena -- <task>` sends text that happens to star
 During refinement nothing is launched; you can still edit the specification, fall back to the
 original request, or cancel before any worktree exists.
 
-After the runners finish, Claude Code waits, runs verification and shows a summary. The recommended
-next step is **Synthesize**: Claude Code compares the candidates, takes the stronger one as the base,
-folds in the other's strengths inside that candidate's worktree, re-runs verification, and commits
-the result on the candidate branch. You can also just pick one candidate as is. Merging into your
-branch (`arena adopt`) happens only when you say so, and nothing is ever pushed.
+After the runners finish, Claude Code waits, runs verification, shows a summary and **always
+presents a comparison first**: facts, per-criterion judgement, the recommended base and what the
+other candidate does better. Only then does it ask what to do. The recommended option is
+**Synthesize**: take the stronger candidate as the base, fold in the other's strengths inside that
+candidate's worktree, re-run verification, and commit the result on the candidate branch. You can
+also adopt either candidate as is. Merging into your branch (`arena adopt`) happens only when you
+say so, and nothing is ever pushed.
 
 ## Use from a terminal
 
