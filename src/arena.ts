@@ -17,12 +17,13 @@ import {
   commitCandidate,
   isSessionActive,
   refreshSession,
+  reviewFinal,
   selectCandidate,
   startArena,
   stopArena,
   waitForArena,
 } from "./core.ts"
-import { renderCompareBundle, renderStatus, renderSummary, renderSynthesisBrief, formatDuration, playerDurationMs } from "./compare/summary.ts"
+import { renderCompareBundle, renderReviewReport, renderStatus, renderSummary, renderSynthesisBrief, formatDuration, playerDurationMs } from "./compare/summary.ts"
 import { findPlayer, listSessions, resolveSessionId, type Session } from "./session.ts"
 import { inspectRepository } from "./git/repository.ts"
 import { resolveSetupCommands, resolveVerifyCommands } from "./verification/detect.ts"
@@ -58,6 +59,9 @@ Usage:
   arena ask <id|latest> <player> [question] [--question-file <f>] [--timeout <sec>] [--json]
                                                     Resume the finished runner's own conversation inside its worktree with a
                                                     read-only question (Claude session / Codex thread) and print its answer
+  arena review <id|latest> [--players a,b] [--instructions <text>|--instructions-file <f>] [--timeout <sec>] [--json]
+                                                    Have every runner review the final version (the selected candidate's
+                                                    worktree) by resuming its conversation read-only; prints the verdicts
   arena select <id|latest> <player|none>            Record the adopted candidate and print its branch
   arena commit <id|latest> <player> [-m <msg>]      Commit the candidate worktree onto its branch
   arena synthesize <id|latest> <winner>             Start the finishing pass: snapshot + select the winner, print a brief
@@ -438,6 +442,48 @@ async function cmdAsk(argv: Argv): Promise<void> {
   if (r.ask.timedOut || (r.ask.exitCode !== 0 && !r.answer.trim())) process.exitCode = 1
 }
 
+async function cmdReview(argv: Argv): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      players: { type: "string" },
+      instructions: { type: "string" },
+      "instructions-file": { type: "string" },
+      timeout: { type: "string" },
+      "max-diff-bytes": { type: "string" },
+      json: { type: "boolean" },
+    },
+  })
+  const id = sessionArg(positionals)
+  let instructions: string | undefined
+  if (values["instructions-file"]) {
+    const p = resolve(values["instructions-file"])
+    if (!existsSync(p)) fail(`instructions file not found: ${p}`)
+    instructions = readFileSync(p, "utf8")
+  } else if (values.instructions) {
+    instructions = values.instructions
+  } else if (positionals.length > 1) {
+    instructions = positionals.slice(1).join(" ")
+  }
+  const r = await reviewFinal(id, {
+    players: values.players ? parsePlayers(values.players) : undefined,
+    instructions,
+    timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
+    maxDiffBytes: values["max-diff-bytes"] ? Number(values["max-diff-bytes"]) : undefined,
+    log: (l) => process.stderr.write(`${l}\n`),
+  })
+  if (values.json) {
+    print(JSON.stringify({ session: r.session.id, round: r.round, answers: r.answers }, null, 2))
+  } else {
+    print(renderReviewReport(r.session, r.round, r.answers))
+    const trailer = r.round.entries.filter((e) => e.worktreeChanged).map((e) => `[arena] warning: ${e.player}'s worktree changed while reviewing; re-run: arena collect ${r.session.id} --player ${e.player}`)
+    trailer.push(`[arena] review round ${r.round.n} saved: ${r.round.entries.map((e) => e.answerPath).filter(Boolean).join(", ") || "(no answers)"}`)
+    process.stderr.write(trailer.join("\n") + "\n")
+  }
+  if (r.round.entries.every((e) => e.error || e.timedOut || !r.answers[e.player]?.trim())) process.exitCode = 1
+}
+
 function cmdSelect(argv: Argv): void {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } })
   const id = sessionArg(positionals)
@@ -595,6 +641,8 @@ async function main(): Promise<void> {
         return cmdLogs(rest)
       case "ask":
         return await cmdAsk(rest)
+      case "review":
+        return await cmdReview(rest)
       case "select":
         return cmdSelect(rest)
       case "commit":

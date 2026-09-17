@@ -12,9 +12,9 @@ import { createWorktree, deleteBranch, removeWorktree } from "./git/worktree.ts"
 import { arenaDir } from "./paths.ts"
 import { isProcessAlive, killProcessGroup, readExitCode, runForeground, spawnDetached } from "./process/spawn.ts"
 import { createRunnerRegistry, resolveRunner } from "./runners/index.ts"
-import { buildArenaPrompt, buildAskPrompt } from "./runners/prompt.ts"
+import { buildArenaPrompt, buildAskPrompt, buildReviewPrompt } from "./runners/prompt.ts"
 import type { ArenaRunner } from "./runners/types.ts"
-import { findPlayer, loadSession, newArenaId, saveSession, type AskRecord, type Player, type Session } from "./session.ts"
+import { findPlayer, loadSession, newArenaId, saveSession, type AskRecord, type Player, type ReviewEntry, type ReviewRound, type ReviewVerdict, type Session } from "./session.ts"
 import { resolveSetupCommands, resolveVerifyCommands, type SetupOverride, type VerifyOverrides } from "./verification/detect.ts"
 import { runAllVerifications, runVerification, DEFAULT_VERIFY_TIMEOUT_MS, type VerifyKind } from "./verification/run.ts"
 
@@ -117,6 +117,7 @@ export async function startArena(opts: StartOptions): Promise<Session> {
     arenaDir: dir,
     startedAt: new Date().toISOString(),
     selected: null,
+    reviews: [],
   }
 
   // 1. isolate
@@ -370,18 +371,20 @@ export interface AskOutcome {
 }
 
 export const DEFAULT_ASK_TIMEOUT_MS = 10 * 60 * 1000
+export const DEFAULT_REVIEW_TIMEOUT_MS = 15 * 60 * 1000
+
+interface ResumeContext {
+  runner: ArenaRunner
+  resultsDir: string
+  logsDir: string
+}
 
 /**
- * Put a read-only follow-up question to a finished runner by resuming its own conversation inside
- * its worktree. The runner keeps the context of its implementation; the core keeps the answer.
- * The worktree is fingerprinted before and after so an answer that (against instructions) changed
- * files is flagged: results collected earlier would then be stale.
+ * Check that a finished runner's conversation can be resumed and make sure its conversation id is
+ * known (looked up now for runners that only reveal it after the run, e.g. Codex). Saves the session
+ * when an id was discovered.
  */
-export async function askPlayer(id: string, playerRef: string, question: string, opts: AskOptions = {}): Promise<AskOutcome> {
-  const log = opts.log ?? (() => {})
-  if (!question.trim()) throw new Error("Question must not be empty")
-  const session = refreshSession(id)
-  const player = findPlayer(session, playerRef)
+function prepareResume(session: Session, player: Player, log: (line: string) => void): ResumeContext {
   if (player.status === "running" || player.status === "pending") {
     throw new Error(`${player.label} is still ${player.status}; wait for it to finish before asking (arena wait ${session.id})`)
   }
@@ -417,18 +420,46 @@ export async function askPlayer(id: string, playerRef: string, question: string,
         ` (sessions started before arena ask existed cannot be resumed).`,
     )
   }
+  return { runner, resultsDir, logsDir }
+}
 
-  const n = player.asks.length + 1
-  const prompt = buildAskPrompt(question)
-  const promptPath = join(session.arenaDir, `${player.id}.ask-${n}.prompt.md`)
-  const answerPath = join(resultsDir, `${player.id}.ask-${n}.md`)
-  const stderrPath = join(logsDir, `${player.id}.ask-${n}.stderr.log`)
-  writeFileSync(promptPath, prompt)
-  const invocation = runner.askInvocation({ sessionId: player.runnerSession ?? "", prompt, promptPath, cwd: player.worktree, resultsDir })
-  const scratchIndex = join(logsDir, `${player.id}.ask.index`)
+interface Exchange {
+  /** File name stem: `<player>.<kind>-<n>`. */
+  kind: "ask" | "review"
+  n: number
+  prompt: string
+  timeoutMs: number
+  log: (line: string) => void
+}
+
+interface ExchangeResult {
+  askedAt: string
+  durationMs: number
+  exitCode: number | null
+  promptPath: string
+  answerPath: string
+  stderrPath: string
+  timedOut: boolean
+  worktreeChanged: boolean
+  answer: string
+}
+
+/**
+ * Resume the runner's conversation inside its worktree with a read-only prompt and wait for the
+ * answer. The worktree is fingerprinted before and after so an answer that (against instructions)
+ * changed files is flagged: results collected earlier would then be stale.
+ */
+async function resumeConversation(session: Session, player: Player, ctx: ResumeContext, x: Exchange): Promise<ExchangeResult> {
+  const stem = `${player.id}.${x.kind}-${x.n}`
+  const promptPath = join(session.arenaDir, `${stem}.prompt.md`)
+  const answerPath = join(ctx.resultsDir, `${stem}.md`)
+  const stderrPath = join(ctx.logsDir, `${stem}.stderr.log`)
+  writeFileSync(promptPath, x.prompt)
+  const invocation = ctx.runner.askInvocation!({ sessionId: player.runnerSession ?? "", prompt: x.prompt, promptPath, cwd: player.worktree, resultsDir: ctx.resultsDir })
+  const scratchIndex = join(ctx.logsDir, `${player.id}.${x.kind}.index`)
   const before = worktreeFingerprint(player.worktree, scratchIndex)
   const askedAt = new Date().toISOString()
-  log(`asking ${player.label}: ${invocation.command} ${invocation.args.join(" ")}`)
+  x.log(`${x.kind === "ask" ? "asking" : "review by"} ${player.label}: ${invocation.command} ${invocation.args.join(" ")}`)
   const r = await runForeground({
     command: invocation.command,
     args: invocation.args,
@@ -438,20 +469,36 @@ export async function askPlayer(id: string, playerRef: string, question: string,
     promptViaStdin: invocation.promptViaStdin,
     stdoutPath: answerPath,
     stderrPath,
-    timeoutMs: opts.timeoutMs ?? DEFAULT_ASK_TIMEOUT_MS,
+    timeoutMs: x.timeoutMs,
   })
   const worktreeChanged = worktreeFingerprint(player.worktree, scratchIndex) !== before
+  const answer = existsSync(answerPath) ? readFileSync(answerPath, "utf8") : ""
+  return { askedAt, durationMs: r.durationMs, exitCode: r.exitCode, promptPath, answerPath, stderrPath, timedOut: r.timedOut, worktreeChanged, answer }
+}
+
+/**
+ * Put a read-only follow-up question to a finished runner by resuming its own conversation inside
+ * its worktree. The runner keeps the context of its implementation; the core keeps the answer.
+ */
+export async function askPlayer(id: string, playerRef: string, question: string, opts: AskOptions = {}): Promise<AskOutcome> {
+  const log = opts.log ?? (() => {})
+  if (!question.trim()) throw new Error("Question must not be empty")
+  const session = refreshSession(id)
+  const player = findPlayer(session, playerRef)
+  const ctx = prepareResume(session, player, log)
+  const n = player.asks.length + 1
+  const r = await resumeConversation(session, player, ctx, { kind: "ask", n, prompt: buildAskPrompt(question), timeoutMs: opts.timeoutMs ?? DEFAULT_ASK_TIMEOUT_MS, log })
   const ask: AskRecord = {
     n,
     question: question.trim(),
-    askedAt,
+    askedAt: r.askedAt,
     durationMs: r.durationMs,
     exitCode: r.exitCode,
-    promptPath,
-    answerPath,
-    stderrPath,
+    promptPath: r.promptPath,
+    answerPath: r.answerPath,
+    stderrPath: r.stderrPath,
     timedOut: r.timedOut,
-    worktreeChanged,
+    worktreeChanged: r.worktreeChanged,
   }
   // Re-read before recording: another `arena ask` (or a collect) may have saved the session meanwhile.
   const latest = refreshSession(id)
@@ -459,8 +506,131 @@ export async function askPlayer(id: string, playerRef: string, question: string,
   target.runnerSession = target.runnerSession ?? player.runnerSession
   target.asks.push(ask)
   saveSession(latest)
-  const answer = existsSync(answerPath) ? readFileSync(answerPath, "utf8") : ""
-  return { session: latest, player: target, ask, answer }
+  return { session: latest, player: target, ask, answer: r.answer }
+}
+
+export interface ReviewOptions {
+  /** Players to ask; default: every player. The selected candidate reviews too (its worktree holds the final version). */
+  players?: string[]
+  timeoutMs?: number
+  /** Extra instructions appended to the review prompt. */
+  instructions?: string
+  /** Max bytes of the final diff inlined in the prompt; larger diffs are referenced by path. */
+  maxDiffBytes?: number
+  log?: (line: string) => void
+}
+
+export interface ReviewOutcome {
+  session: Session
+  round: ReviewRound
+  /** The reviewers' answers, keyed by player id (empty when the runner could not be asked). */
+  answers: Record<string, string>
+}
+
+export const DEFAULT_REVIEW_DIFF_BYTES = 150_000
+
+/** Parse the `VERDICT:` line a reviewer was asked to start with. */
+export function parseReviewVerdict(answer: string): ReviewVerdict {
+  const m = /^\s*(?:[*_#]+\s*)?VERDICT\s*(?:[*_]+)?\s*:\s*(?:[*_`]+\s*)?(approve|request[-_ ]changes)/im.exec(answer)
+  if (!m) return "unknown"
+  return m[1]!.toLowerCase().startsWith("approve") ? "approve" : "request-changes"
+}
+
+/**
+ * Have every runner review the final version (the selected candidate's worktree: a synthesis or a
+ * candidate adopted as is) by resuming their conversations read-only, in parallel. Each runner sees
+ * the same diff (base commit → final working tree) and answers in a fixed format whose first line
+ * is the verdict. Runners that cannot be resumed are recorded with an error instead of failing the
+ * whole round.
+ */
+export async function reviewFinal(id: string, opts: ReviewOptions = {}): Promise<ReviewOutcome> {
+  const log = opts.log ?? (() => {})
+  const session = refreshSession(id)
+  if (!session.selected) throw new Error(`No candidate selected for ${id}: select or synthesize first (arena select ${id} <player> / arena synthesize ${id} <base>)`)
+  const target = findPlayer(session, session.selected)
+  if (!existsSync(target.worktree)) throw new Error(`Worktree missing for ${target.id}: ${target.worktree}`)
+  const reviewers = (opts.players?.length ? opts.players.map((ref) => findPlayer(session, ref)) : session.players).filter((p, i, all) => all.indexOf(p) === i)
+  if (!reviewers.length) throw new Error("No reviewers")
+
+  const n = session.reviews.length + 1
+  const resultsDir = join(session.arenaDir, "results")
+  const logsDir = join(session.arenaDir, "logs")
+  mkdirSync(resultsDir, { recursive: true })
+  mkdirSync(logsDir, { recursive: true })
+  const diffPath = join(resultsDir, `final.review-${n}.diff`)
+  collectDiff(target.worktree, session.baseCommit, diffPath, join(logsDir, `final.review-${n}.status`))
+  const diff = readFileSync(diffPath, "utf8")
+  const maxDiffBytes = opts.maxDiffBytes ?? DEFAULT_REVIEW_DIFF_BYTES
+  const inline = diff.length > maxDiffBytes ? "" : diff
+  const targetHead = gitTry(target.worktree, ["rev-parse", "HEAD"])
+  const targetFingerprint = worktreeFingerprint(target.worktree, join(logsDir, "final.review.index"))
+  const synthesized = session.synthesis !== undefined
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS
+
+  // Resolve conversation ids sequentially (this may save the session), then review in parallel.
+  const prepared = reviewers.map((player) => {
+    try {
+      return { player, ctx: prepareResume(session, player, log), error: undefined }
+    } catch (err) {
+      log(`skipping ${player.label}: ${(err as Error).message}`)
+      return { player, ctx: undefined, error: (err as Error).message }
+    }
+  })
+  const requestedAt = new Date().toISOString()
+  const results = await Promise.all(
+    prepared.map(async ({ player, ctx, error }): Promise<{ entry: ReviewEntry; answer: string }> => {
+      if (!ctx) {
+        return { entry: { player: player.id, verdict: "unknown", askedAt: requestedAt, durationMs: 0, exitCode: null, timedOut: false, worktreeChanged: false, error }, answer: "" }
+      }
+      const prompt = buildReviewPrompt({
+        finalLabel: target.label,
+        finalWorktree: target.worktree,
+        finalBranch: target.branch,
+        reviewerIsTarget: player.id === target.id,
+        reviewerWorktree: player.worktree,
+        synthesized,
+        baseCommit: session.baseCommit,
+        diff: inline,
+        diffPath,
+        diffTruncated: false,
+        instructions: opts.instructions,
+      })
+      const r = await resumeConversation(session, player, ctx, { kind: "review", n, prompt, timeoutMs, log })
+      const entry: ReviewEntry = {
+        player: player.id,
+        verdict: r.timedOut ? "unknown" : parseReviewVerdict(r.answer),
+        askedAt: r.askedAt,
+        durationMs: r.durationMs,
+        exitCode: r.exitCode,
+        promptPath: r.promptPath,
+        answerPath: r.answerPath,
+        stderrPath: r.stderrPath,
+        timedOut: r.timedOut,
+        worktreeChanged: r.worktreeChanged,
+      }
+      return { entry, answer: r.answer }
+    }),
+  )
+  const round: ReviewRound = {
+    n,
+    target: target.id,
+    targetCommit: targetHead.exitCode === 0 ? targetHead.stdout.trim() : null,
+    targetFingerprint,
+    requestedAt,
+    diffPath,
+    instructions: opts.instructions?.trim() || undefined,
+    entries: results.map((r) => r.entry),
+  }
+  const latest = refreshSession(id)
+  for (const { player } of prepared) {
+    const p = findPlayer(latest, player.id)
+    p.runnerSession = p.runnerSession ?? player.runnerSession
+  }
+  latest.reviews.push(round)
+  saveSession(latest)
+  const answers: Record<string, string> = {}
+  for (const [i, r] of results.entries()) answers[reviewers[i]!.id] = r.answer
+  return { session: latest, round, answers }
 }
 
 /**

@@ -18,6 +18,7 @@ const session: Session = {
   arenaDir: "/arena/repo/20260917-abc123",
   startedAt: "2026-09-17T00:00:00.000Z",
   selected: "codex",
+  reviews: [],
   verify: { test: "npm test", lint: "npm run lint" },
   setup: ["npm ci"],
   players: [

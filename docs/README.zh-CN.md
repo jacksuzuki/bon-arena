@@ -93,7 +93,7 @@ Claude Code 会询问 Player 1 / Player 2，然后在启动任何东西之前**�
 
 `/arena task <text>`（或纯文本）默认会提炼；不带参数的 `/arena` 会与玩家一起询问模式。`.arena.yaml` 中的 `refine: false` 可把仓库默认改为 simple 模式，`task --refine` 强制提炼，`/arena -- <text>` 可发送恰好以关键字开头的文本。提炼期间不会启动任何东西；在任何 worktree 存在之前，你都可以编辑规格或取消。确认步骤不会再次提供模式选择。
 
-runner 完成后，Claude Code 会等待、运行验证、显示摘要，并**始终先给出比较**：事实、逐项判断、推荐的基底以及另一候选做得更好的地方。之后才询问下一步。推荐选项是 **Synthesize**：以更强的候选为基底，在该候选的 worktree 中融入另一方的优点，重新运行验证，并把结果提交到候选分支。你也可以原样采用任一候选。合并到你的分支（`arena adopt`）只在你明确要求时进行，并且永远不会 push。
+runner 完成后，Claude Code 会等待、运行验证、显示摘要，并**始终先给出比较**：事实、逐项判断、推荐的基底以及另一候选做得更好的地方。之后才询问下一步。推荐选项是 **Synthesize**：以更强的候选为基底，在该候选的 worktree 中融入另一方的优点，重新运行验证，并把结果提交到候选分支。你也可以原样采用任一候选。在询问是否合并之前，Claude Code 会让**两个 runner 都审阅最终版本**（`arena review`）：每个 runner 以只读方式恢复自己的会话，查看最终 diff，并给出结论和发现；Claude Code 会核实这些发现，修复它认可的，并把拒绝的连同理由一起展示给你。合并到你的分支（`arena adopt`）只在你明确要求时进行，并且永远不会 push。
 
 ## 在终端中使用
 
@@ -116,6 +116,8 @@ arena synthesize latest codex          # 快照 + 选定基底，打印另一候
 arena collect latest --player codex    # 重新验证
 arena commit latest codex -m "arena: synthesis"
 arena finish latest
+arena review latest                    # 每个 runner 审阅最终版本（只读、并行）
+arena review latest --instructions "重点看重试路径"   # 可选的提示；--players codex 可限定审阅者
 ```
 
 在终端中提炼（CLI 从不调用模型；思考由宿主或人来完成）：
@@ -141,7 +143,8 @@ arena start --players claude,codex --task-file spec.md \
     task.original.md                 提炼前的需求（仅 refined 模式）
     claude/  codex/                  worktree（分支 arena/<id>/<player>）
     logs/<player>.stdout.log …       runner 输出、退出码
-    results/<player>.diff …          diff、status、验证日志、arena ask 的回答
+    results/<player>.diff …          diff、status、验证日志、arena ask 的回答、
+                                      arena review 的审阅（<player>.review-<n>.md、final.review-<n>.diff）
 ```
 
 ## 配置
@@ -205,6 +208,12 @@ runner 是一次性进程，但它们的会话在进程结束后仍然保留。`
 提问是严格只读的：提示词会如此说明，Claude 被限制为只能使用查看类工具，Codex 使用只读沙箱，并且会在前后比较 worktree 的指纹。如果仍然发生了改动，回答会被标记，在信任之前的结果前应重新运行 `arena collect --player <p>`。`arena ask` 用来理解候选（"这个改动对应规格的哪一条？""为什么这个测试在 Windows 上跳过？"），而不是用来要求修复：修复由宿主在 synthesis 步骤完成。
 
 Claude 的会话 id 在启动时固定（`--session-id`）。Codex 没有这样的参数，因此在运行结束后按 worktree 路径和开始时间在 `$CODEX_HOME/sessions` 中查找 thread id。已 clean 的会话，以及在 `arena ask` 出现之前的版本启动的会话，无法提问。自定义 runner 需要在配置中提供 `askArgs`。
+
+### 让 runner 审阅最终版本（`arena review`）
+
+选定候选之后（无论是 synthesis 的结果还是原样采用的候选），`arena review <id>` 会通过与 `arena ask` 相同的只读恢复方式，让**每个 runner** 并行审阅最终版本。每个审阅者会收到从基准提交到所选 worktree 的 diff（包含宿主未提交的编辑）、worktree 路径，以及最终版本与它自己候选的关系说明："基于你的候选，由宿主编辑"、"基于另一候选"或"原样采用"。落选的 runner 会被明确告知它自己的 worktree 不是最终版本。回答必须使用固定格式：第一行是 `VERDICT: approve` 或 `VERDICT: request-changes`，然后是按 `blocker` / `major` / `minor` / `nit` 排序、附文件和行号的发现。`--instructions "<文本>"` 为审阅者附加关注点；`--players` 限定审阅者。
+
+每一轮都记录在会话中（`reviews[]`：目标提交、每个 runner 的结论、回答路径），回答保存在 `results/<player>.review-<n>.md`，被审阅的 diff 在 `results/final.review-<n>.diff`，`arena summary` 会显示结论。无法恢复或超时的 runner 会被记为 `not asked` / `timed out`，而不会让整轮失败。结论是给宿主的输入，不是命令：在 `/arena` 中，Claude Code 会对照代码核实每个 blocker 或 major 发现，在所选 worktree 中修复它认可的，重新运行验证，并在改动了代码时再跑一轮（最多两轮）。被拒绝的发现会连同理由展示给用户。runner 自己永远不会做修改。
 
 ## 项目结构
 

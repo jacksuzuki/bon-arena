@@ -82,9 +82,62 @@ export function renderSummary(session) {
         lines.push(`Selected: ${session.selected}`);
     if (session.synthesis)
         lines.push(`Synthesis: base ${session.synthesis.base}${session.synthesis.finishedAt ? ` (finished${session.synthesis.commit ? ` @ ${session.synthesis.commit.slice(0, 12)}` : ""})` : " (in progress)"}`);
+    for (const round of session.reviews)
+        lines.push(`Review ${round.n}: ${describeReviewRound(session, round)}`);
     if (session.adopted)
         lines.push(`Adopted: ${session.adopted.player} via ${session.adopted.mode} → ${session.adopted.commit.slice(0, 12)}`);
     return lines.join("\n").trimEnd();
+}
+/** One line per review round: `Claude: approve, Codex: request-changes (target codex @ abc123)`. */
+export function describeReviewRound(session, round) {
+    const parts = round.entries.map((e) => {
+        const label = labelOf(session, e.player);
+        if (e.error)
+            return `${label}: not asked`;
+        if (e.timedOut)
+            return `${label}: timed out`;
+        return `${label}: ${e.verdict}${e.worktreeChanged ? " ⚠ worktree changed" : ""}`;
+    });
+    return `${parts.join(", ")} (target ${labelOf(session, round.target)}${round.targetCommit ? ` @ ${round.targetCommit.slice(0, 12)}` : ""})`;
+}
+function labelOf(session, playerId) {
+    return session.players.find((p) => p.id === playerId)?.label ?? playerId;
+}
+/**
+ * Markdown report of one review round, printed by `arena review`: what was reviewed, then every
+ * reviewer's verdict and full answer.
+ */
+export function renderReviewReport(session, round, answers, maxAnswerChars = 40_000) {
+    const target = session.players.find((p) => p.id === round.target);
+    const out = [];
+    out.push(`# Arena ${session.id} — review round ${round.n}`, "");
+    out.push(`Final version: ${target?.label ?? round.target}${round.targetCommit ? ` @ ${round.targetCommit.slice(0, 12)}` : ""}${session.synthesis ? " (synthesis)" : " (adopted as is)"}`);
+    if (target)
+        out.push(`Worktree:      ${target.worktree}`, `Branch:        ${target.branch}`);
+    out.push(`Diff reviewed: ${round.diffPath}`);
+    out.push(`Verdicts:      ${describeReviewRound(session, round)}`);
+    if (round.instructions)
+        out.push("", "Host instructions:", "", round.instructions.trim());
+    out.push("");
+    for (const e of round.entries) {
+        const label = labelOf(session, e.player);
+        if (e.error) {
+            out.push(`## ${label} — not asked`, "", e.error, "");
+            continue;
+        }
+        const status = e.timedOut ? ` (timed out after ${formatDuration(e.durationMs)})` : e.exitCode !== 0 ? ` (runner exited with ${e.exitCode ?? "signal"})` : ` (${formatDuration(e.durationMs)})`;
+        out.push(`## ${label} — ${e.verdict}${status}`, "");
+        if (e.worktreeChanged)
+            out.push(`_Warning: ${label}'s worktree changed while reviewing; re-run arena collect ${session.id} --player ${e.player}._`, "");
+        const answer = (answers?.[e.player] ?? (e.answerPath && existsSync(e.answerPath) ? readFileSync(e.answerPath, "utf8") : "")).trim();
+        if (!answer)
+            out.push("_(no answer)_", "");
+        else if (answer.length > maxAnswerChars)
+            out.push(answer.slice(0, maxAnswerChars), "", `_(truncated; full text: ${e.answerPath})_`, "");
+        else
+            out.push(answer, "");
+    }
+    return out.join("\n").trimEnd();
 }
 function firstLine(s) {
     const line = s.split("\n")[0] ?? "";

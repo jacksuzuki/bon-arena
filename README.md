@@ -130,8 +130,11 @@ presents a comparison first**: facts, per-criterion judgement, the recommended b
 other candidate does better. Only then does it ask what to do. The recommended option is
 **Synthesize**: take the stronger candidate as the base, fold in the other's strengths inside that
 candidate's worktree, re-run verification, and commit the result on the candidate branch. You can
-also adopt either candidate as is. Merging into your branch (`arena adopt`) happens only when you
-say so, and nothing is ever pushed.
+also adopt either candidate as is. Before asking you to merge, Claude Code has **both runners
+review the final version** (`arena review`): each resumes its own conversation read-only, sees the
+final diff, and answers with a verdict and findings; Claude Code verifies the findings, fixes the
+ones it accepts, and shows you what it rejected and why. Merging into your branch (`arena adopt`)
+happens only when you say so, and nothing is ever pushed.
 
 ## Use from a terminal
 
@@ -154,6 +157,8 @@ arena synthesize latest codex          # snapshot + select the base, print the o
 arena collect latest --player codex    # re-verify
 arena commit latest codex -m "arena: synthesis"
 arena finish latest
+arena review latest                    # every runner reviews the final version (read-only, in parallel)
+arena review latest --instructions "Focus on the retry path"   # optional steer; --players codex limits reviewers
 ```
 
 Refinement from a terminal (the CLI never calls a model; a host or a human does the thinking):
@@ -182,7 +187,8 @@ Layout on disk:
     task.original.md                 the request before refinement (refined mode only)
     claude/  codex/                  worktrees (branches arena/<id>/<player>)
     logs/<player>.stdout.log …       runner output, exit codes
-    results/<player>.diff …          diffs, status, verification logs, answers from arena ask
+    results/<player>.diff …          diffs, status, verification logs, answers from arena ask,
+                                      reviews from arena review (<player>.review-<n>.md, final.review-<n>.diff)
 ```
 
 ## Configuration
@@ -272,6 +278,27 @@ The Claude conversation id is fixed at launch (`--session-id`). Codex has no suc
 id is looked up after the run in `$CODEX_HOME/sessions` by worktree path and start time. Sessions
 whose worktrees were cleaned, and sessions started with a version before `arena ask` existed, cannot
 be asked. Custom runners need `askArgs` in the configuration.
+
+### Runner review of the final version (`arena review`)
+
+Once a candidate is selected (a synthesis, or a candidate adopted as is), `arena review <id>` puts
+the final version in front of **every runner**, in parallel, through the same read-only resume as
+`arena ask`. Each reviewer gets the diff from the base commit to the selected worktree (including
+uncommitted host edits), the worktree path, and a statement of how the final version relates to its
+own candidate: "based on your candidate, edited by the host", "based on the other candidate", or
+"adopted as is". The runner whose candidate lost is told explicitly that its own worktree is not the
+final version. Reviewers must answer in a fixed format: a first line `VERDICT: approve` or
+`VERDICT: request-changes`, then findings ordered `blocker` / `major` / `minor` / `nit` with file and
+line. `--instructions "<text>"` appends a focus for the reviewers; `--players` limits who reviews.
+
+Rounds are recorded in the session (`reviews[]`: target commit, per-runner verdict, answer paths),
+saved under `results/<player>.review-<n>.md` with the reviewed diff in
+`results/final.review-<n>.diff`, and summarized by `arena summary`. A runner that cannot be resumed
+or times out is recorded as `not asked` / `timed out` instead of failing the round. The verdicts
+are input for the host, not orders: in `/arena`, Claude Code verifies each blocker or major finding
+against the code, fixes what it accepts in the selected worktree, re-runs verification, and runs a
+second round when it changed something (two rounds at most). Rejected findings are shown to the
+user with the reason. Runners never fix anything themselves.
 
 ## Project layout
 

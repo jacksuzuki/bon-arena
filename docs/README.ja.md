@@ -93,7 +93,7 @@ Claude Code は Player 1 / Player 2 を尋ねたあと、何かを起動する�
 
 `/arena task <text>`（または平文）は既定で洗練します。引数なしの `/arena` はプレイヤーと一緒にモードを尋ねます。`.arena.yaml` の `refine: false` でリポジトリの既定を simple モードにでき、`task --refine` は洗練を強制し、`/arena -- <text>` はキーワードで始まる文面をそのまま送ります。洗練中は何も起動されず、worktree が作られる前に仕様の編集やキャンセルができます。確認の段階でモードを再度選ぶことはありません。
 
-runner の完了後、Claude Code は待機し、検証を実行してサマリーを表示し、**必ず先に比較を提示**します。事実、観点ごとの判断、推奨ベース、もう一方の候補の優れた点です。そのうえで次の行動を尋ねます。推奨は **Synthesize**（強い候補をベースにし、その worktree の中でもう一方の長所を取り込み、再検証して候補ブランチにコミット）です。どちらかの候補をそのまま採用することもできます。あなたのブランチへのマージ（`arena adopt`）はあなたが指示したときだけ行われ、push は決して行いません。
+runner の完了後、Claude Code は待機し、検証を実行してサマリーを表示し、**必ず先に比較を提示**します。事実、観点ごとの判断、推奨ベース、もう一方の候補の優れた点です。そのうえで次の行動を尋ねます。推奨は **Synthesize**（強い候補をベースにし、その worktree の中でもう一方の長所を取り込み、再検証して候補ブランチにコミット）です。どちらかの候補をそのまま採用することもできます。マージを尋ねる前に、Claude Code は**両方の runner に最終版をレビューさせます**（`arena review`）。各 runner は自分の会話を読み取り専用で再開し、最終版の diff を見て、verdict と所見を返します。Claude Code は所見を検証し、認めたものを直し、却下したものは理由と一緒に提示します。あなたのブランチへのマージ（`arena adopt`）はあなたが指示したときだけ行われ、push は決して行いません。
 
 ## ターミナルから使う
 
@@ -116,6 +116,8 @@ arena synthesize latest codex          # ベースをスナップショット + 
 arena collect latest --player codex    # 再検証
 arena commit latest codex -m "arena: synthesis"
 arena finish latest
+arena review latest                    # 全 runner が最終版をレビュー (読み取り専用、並列)
+arena review latest --instructions "リトライ経路を重点的に"   # 任意の指示。--players codex でレビュアーを限定
 ```
 
 ターミナルからの洗練（CLI はモデルを呼びません。考えるのはホストか人間です）:
@@ -141,7 +143,8 @@ arena start --players claude,codex --task-file spec.md \
     task.original.md                 洗練前の依頼 (refined モードのみ)
     claude/  codex/                  worktree (ブランチ arena/<id>/<player>)
     logs/<player>.stdout.log …       runner の出力、exit code
-    results/<player>.diff …          diff、status、検証ログ、arena ask の回答
+    results/<player>.diff …          diff、status、検証ログ、arena ask の回答、
+                                      arena review のレビュー (<player>.review-<n>.md, final.review-<n>.diff)
 ```
 
 ## 設定
@@ -205,6 +208,12 @@ runner は一回きりのプロセスですが、会話はプロセスの終了�
 質問は厳密に読み取り専用です。プロンプトでそう指示し、Claude は閲覧系ツールに、Codex は read-only サンドボックスに制限し、さらに worktree のフィンガープリントを前後で比較します。それでも変更があった場合は回答に警告が付くので、以前の結果を信用する前に `arena collect --player <p>` をやり直してください。`arena ask` は候補を理解するためのもの（「この変更は仕様のどの項目？」「なぜこのテストは Windows でスキップ？」）で、修正を頼むためのものではありません。修正は synthesis ステップでホストが行います。
 
 Claude の会話 ID は起動時に固定します（`--session-id`）。Codex にはそのフラグがないため、実行後に `$CODEX_HOME/sessions` を worktree のパスと開始時刻で検索して thread id を特定します。worktree を clean したセッションや、`arena ask` 実装前のバージョンで開始したセッションには質問できません。custom runner には設定の `askArgs` が必要です。
+
+### 最終版を runner にレビューさせる（`arena review`）
+
+候補を選択したら（synthesis の結果でも、as-is で採用した候補でも）、`arena review <id>` は `arena ask` と同じ読み取り専用の再開で、**すべての runner** に最終版を並列でレビューさせます。各レビュアーには、base commit から選択済み worktree まで（ホストの未コミット編集を含む）の diff、worktree のパス、そして最終版と自分の候補との関係（「あなたの候補をベースにホストが編集」「もう一方の候補がベース」「そのまま採用」）が伝えられます。選ばれなかった runner には、自分の worktree は最終版ではないと明示します。回答は固定形式です。1 行目が `VERDICT: approve` または `VERDICT: request-changes`、続いて `blocker` / `major` / `minor` / `nit` の順にファイルと行を添えた所見。`--instructions "<文>"` でレビュアーの注目点を追加でき、`--players` でレビュアーを限定できます。
+
+ラウンドはセッションに記録され（`reviews[]`: 対象 commit、runner ごとの verdict、回答パス）、回答は `results/<player>.review-<n>.md`、レビュー対象の diff は `results/final.review-<n>.diff` に保存され、`arena summary` に verdict が出ます。再開できない runner やタイムアウトはラウンドを失敗させず、`not asked` / `timed out` として記録されます。verdict はホストへの入力であって命令ではありません。`/arena` では Claude Code が blocker / major の所見をコードに当たって検証し、認めたものだけを選択済み worktree で直して再検証し、何かを変えたときは 2 ラウンド目を回します（最大 2 ラウンド）。却下した所見は理由付きでユーザーに提示します。runner が自分で修正することはありません。
 
 ## プロジェクト構成
 

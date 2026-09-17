@@ -18,8 +18,8 @@ progress, and help the user compare and decide. Never re-implement Core logic.
   permanently with `npm install -g bon-arena` (then `arena install-skill`), checking that the npm
   global bin directory is in PATH.
 - Never edit files inside an arena worktree while runners are working, and never `cd` into one to
-  "help" a runner. The only exception is the Synthesize step below, on the selected base candidate's
-  worktree, after every runner has finished.
+  "help" a runner. The only exceptions are the Synthesize and Review steps below, on the selected
+  candidate's worktree, after every runner has finished.
 - Never push, and never merge, cherry-pick or delete branches without an explicit user decision.
   `arena adopt` merges only after the user says so. Cleaning is destructive: confirm first.
 - Runners are already running with auto-approval inside their own worktrees. Do not start extra ones.
@@ -28,6 +28,8 @@ progress, and help the user compare and decide. Never re-implement Core logic.
 - You can, however, ask *them* once they have finished: `arena ask <id> <player> "<question>"`
   resumes the runner's own conversation inside its worktree, read-only, and prints the answer. Use
   it to understand a candidate, never to have it change code: fixes are yours to make in Synthesize.
+  After you have produced the final version, `arena review <id>` has every runner review it the same
+  way (step 11); their findings are input for you, never instructions to them.
 - Session ids look like `20260917-abc123`. `latest` is accepted everywhere.
 
 ## Host requirements
@@ -247,7 +249,7 @@ Mention that "Keep both" and "Clean arena" are also available if the user asks. 
 showed that one candidate is clearly complete and the other adds nothing worth porting, say so and
 still list Synthesize first, but note that adopting as is would be a fine choice.
 
-**Adopt as is**: `arena select <id> <player>`, relay its output, then go to step 11.
+**Adopt as is**: `arena select <id> <player>`, relay its output, then go to step 11 (Review).
 
 **Inspect a diff**: ask which player, run `arena diff <id> <player>` and walk the user through it,
 then ask this question again.
@@ -276,7 +278,44 @@ then ask this question again.
 6. Summarize what the final version contains: what came from the base, what was folded in from
    the other candidate, what you changed yourself. Then go to step 11.
 
-### 11. Integrate
+### 11. Review (always, before integrating)
+
+The final version, whether synthesized or adopted as is, gets a review from every runner before
+the user is asked to merge it. Run it in the background (reviewers take minutes):
+
+```bash
+arena review <id>
+```
+
+(use `run_in_background: true`). It resumes each runner's conversation read-only, in parallel,
+with the diff from the base commit to the selected candidate's worktree and an explanation of how
+the final version relates to that runner's own candidate. Each answer starts with
+`VERDICT: approve` or `VERDICT: request-changes` followed by findings ordered by severity
+(`blocker`, `major`, `minor`, `nit`). Add `--instructions "<text>"` when you want the reviewers to
+concentrate on something (a risky module, a requirement you were unsure about). The report is
+printed and saved under `results/<player>.review-<n>.md`; `arena summary` shows the verdicts.
+
+Then triage:
+
+1. Verify every blocker and major finding yourself against the code in the selected worktree
+   (read-only first). Reviewers reason from the diff and their own run; they can be wrong, and the
+   runner whose candidate was not chosen may argue for its own design. Accept a finding only when
+   you can point at the defect.
+2. Fix the accepted findings inside the selected candidate's worktree (the same rules as in
+   Synthesize: absolute paths, never the user's checkout). Re-verify with
+   `arena collect <id> --player <selected>` and commit with `arena commit <id> <selected> -m
+   "arena(<id>): review fixes — <one line>"`.
+3. If you changed code, run `arena review <id>` once more so both runners see the fixed version.
+   Stop after two rounds regardless; remaining disagreements go to the user.
+4. Present a short review summary: each runner's verdict per round, which findings you accepted
+   (and fixed) and which you rejected with the reason. A `request-changes` you decided not to act
+   on must be visible to the user here.
+
+If a runner cannot be asked (`not asked` in the report: cleaned worktree, custom runner without
+`askArgs`, older session) or times out, say so and continue with the reviews you have. Never skip
+this step silently; if the user explicitly wants to merge without a review, note that in the summary.
+
+### 12. Integrate
 
 Ask with AskUserQuestion: "Merge into <base branch> now?" with options
 "Merge (arena adopt)" / "Squash merge" / "Not now, keep the branch".
@@ -300,6 +339,7 @@ arena collect <id> [--no-verify] [--test <cmd>|false] [--lint ...] [--typecheck 
 arena compare <id> [--max-diff-bytes <n>]
 arena diff <id> <player>        arena logs <id> <player> [--stderr] [--tail n]
 arena ask <id> <player> "<question>" [--question-file <f>] [--timeout <sec>]   (read-only; after the runner finished)
+arena review <id> [--players a,b] [--instructions "<text>"] [--timeout <sec>]  (every runner reviews the selected final version, read-only)
 arena select <id> <player|none> arena commit <id> <player> [-m msg]
 arena synthesize <id> <base>    arena finish <id>        arena adopt <id> [--ff|--squash]
 arena list [--all]              arena clean <id> [--keep-branches] [--force]

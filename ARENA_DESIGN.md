@@ -721,6 +721,31 @@ custom : 設定の askArgs ({{sessionId}} {{prompt}} {{promptFile}} {{cwd}})
 
 「直させる」（差し戻し）は意図的に含めない。修正はホストが synthesis で行う。
 
+### 最終成果物の runner レビュー（`arena review`）
+
+ホストが最終版（synthesis の結果、または as-is で採用した候補）を作ったあと、マージの前に
+**すべての runner** にそれをレビューさせる。`arena review <id>` は `arena ask` と同じ仕組みで
+各 runner の会話を読み取り専用で再開し、並列に走らせる。
+
+```text
+入力 : 選択済み候補 (session.selected) の worktree = 最終版
+       base commit → 最終版 (未コミット分を含む) の diff を results/final.review-<n>.diff に保存
+       各 runner に「最終版の場所」「自分の候補との関係」(自分の候補ベース / 相手の候補ベース /
+       as-is 採用) を明示。相手の候補ベースの runner には「自分の worktree は最終版ではない」と伝える
+出力 : 先頭行 VERDICT: approve | request-changes、続けて重要度順の所見
+       ([blocker|major|minor|nit] <file>:<line> — 内容と直し方)
+記録 : session.reviews[] にラウンド単位 (対象 player, 対象 HEAD, フィンガープリント, 各 runner の
+       verdict / 回答パス / timeout / worktree 変化)。arena summary に verdict を表示
+```
+
+再開できない runner（worktree 削除済み、`askArgs` のない custom runner、旧バージョンのセッション）
+やタイムアウトはラウンド全体を失敗させず、その runner のエントリに `error` / `timedOut` として残す。
+
+verdict はホストへの入力であって指示ではない。ホストは blocker / major を自分でコードに当たって
+検証し、認めた所見だけを選択済み worktree で直し、`arena collect --player` と `arena commit` の
+あとで必要なら 2 ラウンド目を回す（skill は最大 2 ラウンド）。却下した所見は理由付きでユーザーに
+見せる。runner に修正させることはしない。
+
 ---
 
 ## 16. 採用

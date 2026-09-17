@@ -53,6 +53,42 @@ export const AskRecordSchema = z.object({
     /** True when the worktree differed after the answer; results collected before are then stale. */
     worktreeChanged: z.boolean().default(false),
 });
+export const ReviewVerdictSchema = z.enum(["approve", "request-changes", "unknown"]);
+/** One runner's review of the final version (`arena review`). */
+export const ReviewEntrySchema = z.object({
+    player: z.string(),
+    /** Parsed from the first `VERDICT:` line of the answer; "unknown" when absent or on failure. */
+    verdict: ReviewVerdictSchema,
+    askedAt: z.string(),
+    durationMs: z.number(),
+    exitCode: z.number().nullable(),
+    promptPath: z.string().optional(),
+    /** The runner's review (stdout). */
+    answerPath: z.string().optional(),
+    stderrPath: z.string().optional(),
+    timedOut: z.boolean().default(false),
+    /** True when the reviewer's own worktree differed after the review (it should never change). */
+    worktreeChanged: z.boolean().default(false),
+    /** Why the runner could not be asked (no conversation id, cleaned worktree, ...). */
+    error: z.string().optional(),
+});
+/** One `arena review` round: every runner reviews the same snapshot of the selected candidate. */
+export const ReviewRoundSchema = z.object({
+    /** 1-based sequence number within the session. */
+    n: z.number(),
+    /** The candidate whose worktree holds the final version (the selected player). */
+    target: z.string(),
+    /** HEAD of the target worktree when the round started. */
+    targetCommit: z.string().nullable(),
+    /** Content fingerprint of the target worktree when the round started (HEAD + working tree). */
+    targetFingerprint: z.string(),
+    requestedAt: z.string(),
+    /** Diff from the base commit to the final version, as handed to the reviewers. */
+    diffPath: z.string(),
+    /** Extra instructions from the host, if any. */
+    instructions: z.string().optional(),
+    entries: z.array(ReviewEntrySchema),
+});
 export const PlayerSchema = z.object({
     /** Unique within the session. Equals the runner id unless the same runner plays twice. */
     id: z.string(),
@@ -117,6 +153,8 @@ export const SessionSchema = z.object({
         commit: z.string().optional(),
     })
         .optional(),
+    /** Review rounds of the final version by the runners (`arena review`). */
+    reviews: z.array(ReviewRoundSchema).default([]),
     /** Recorded when the selected branch was merged into the base branch via `arena adopt`. */
     adopted: z
         .object({ player: z.string(), mode: z.enum(["merge", "ff", "squash"]), commit: z.string(), at: z.string() })
