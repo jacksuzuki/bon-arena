@@ -14,6 +14,11 @@ export function sessionFile(id: string): string {
   return join(sessionsDir(), `${id}.json`)
 }
 
+/** Original requests saved by `arena refine` while a host refines them into a specification. */
+export function draftsDir(): string {
+  return join(arenaHome(), "drafts")
+}
+
 /** Directory holding worktrees, logs and results for one arena. */
 export function arenaDir(projectName: string, id: string): string {
   return join(arenaHome(), projectName, id)

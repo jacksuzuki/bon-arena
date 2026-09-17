@@ -6,6 +6,8 @@ produced: diff stats, tests, lint, typecheck — and pick the one you want.
 ```
 Claude Code (/arena)
       ↓
+  refine the request with you into a one-shot specification   (skip with "simple")
+      ↓
   Arena Core  ──┬── worktree A ── Claude Code CLI
                 └── worktree B ── Codex CLI
       ↓
@@ -72,17 +74,34 @@ In any git repository:
 /arena Replace the hand-rolled session code with Better Auth
 ```
 
-Claude Code asks for Player 1 / Player 2, launches both in isolated worktrees, waits, runs
-verification and shows a summary. The recommended next step is **Synthesize**: Claude Code compares
-the candidates, takes the stronger one as the base, folds in the other's strengths inside that
-candidate's worktree, re-runs verification, and commits the result on the candidate branch. You can
-also just pick one candidate as is. Merging into your branch (`arena adopt`) happens only when you
-say so, and nothing is ever pushed.
+Claude Code asks for Player 1 / Player 2, then **refines the task** before anything is launched:
+it reads the code the request touches, works out what the runners would otherwise have to guess
+(scope, affected files, edge cases, naming, compatibility, tests), asks you only about the points it
+cannot settle itself, and writes a specification (goal, scope, requirements, acceptance criteria,
+constraints, verification, decisions). You approve or edit it, and only then are both players
+launched in isolated worktrees with that specification. The runners are headless and cannot ask
+questions, so this is the step that keeps them from guessing differently. Your original request is
+stored with the session and shown next to the specification in `arena compare`.
+
+Skip the refinement with **simple mode**, which passes your text to the runners verbatim:
+
+```
+/arena simple Rename the `Session` type to `ArenaSession`
+```
+
+`/arena refine <task>` forces refinement, and `refine: false` in `.arena.yaml` makes simple mode the
+default for a repository.
+
+After the runners finish, Claude Code waits, runs verification and shows a summary. The recommended
+next step is **Synthesize**: Claude Code compares the candidates, takes the stronger one as the base,
+folds in the other's strengths inside that candidate's worktree, re-runs verification, and commits
+the result on the candidate branch. You can also just pick one candidate as is. Merging into your
+branch (`arena adopt`) happens only when you say so, and nothing is ever pushed.
 
 ## Use from a terminal
 
 ```bash
-arena run --players claude,codex --task "Add rate limiting to the API"
+arena run --players claude,codex --task "Add rate limiting to the API"   # simple mode: text goes to the runners verbatim
 # or step by step
 arena start --players claude,codex --task-file task.md
 arena wait latest
@@ -101,12 +120,30 @@ arena commit latest codex -m "arena: synthesis"
 arena finish latest
 ```
 
+Refinement from a terminal (the CLI never calls a model; a host or a human does the thinking):
+
+```bash
+arena refine --task "Add rate limiting to the API"   # brief: repo facts, procedure, spec template;
+                                                     # saves the request to ~/.arena/drafts/<id>.original.md
+#   ...write the specification to spec.md (ask the user what cannot be settled from the code)...
+arena start --players claude,codex --task-file spec.md \
+            --original-task-file ~/.arena/drafts/<id>.original.md   # refined mode: original recorded
+```
+
+`--original-task` / `--original-task-file` is what distinguishes the modes: with it the session is
+in refined mode (`task` is the specification, `originalTask` the request, and the runner prompt says
+the task is an agreed specification to treat as authoritative); without it the session is in simple
+mode. `arena doctor --json` reports the repository's default (`taskMode`).
+
 Layout on disk:
 
 ```
 ~/.arena/
-  sessions/<id>.json                 session state
+  sessions/<id>.json                 session state (task, taskMode, originalTask, players, results …)
+  drafts/<id>.original.md            requests saved by `arena refine`
   <project>/<id>/
+    task.md                          what the runners were given
+    task.original.md                 the request before refinement (refined mode only)
     claude/  codex/                  worktrees (branches arena/<id>/<player>)
     logs/<player>.stdout.log …       runner output, exit codes
     results/<player>.diff …          diffs, status, verification logs
@@ -140,6 +177,8 @@ verify:
 setup: npm ci              # run in every fresh worktree before the runners start
 # setup: [npm ci, npm run codegen]
 # setup: false             # skip; default is lockfile detection (npm ci / pnpm / yarn / bun install)
+
+refine: true               # default task mode for hosts: true = refine the request first, false = simple mode
 ```
 
 Fresh worktrees contain only tracked files, so without `setup` the runners and the verification step
@@ -152,7 +191,9 @@ to stdin.
 ## How runners are launched
 
 Both players receive the same prompt: shared arena rules (work only in the current worktree, finish
-the task completely, run tests, do not push) followed by the task verbatim.
+the task completely, run tests, do not push) followed by the task verbatim. In refined mode the
+task is the specification agreed with the user, and the rules add that it is authoritative: the
+original request is not part of the prompt, so the runners cannot re-interpret it.
 
 | Runner | Invocation |
 |---|---|
@@ -176,6 +217,7 @@ memory; the Claude runner therefore passes `--settings '{"autoMemoryEnabled":fal
 src/
   arena.ts            CLI (thin command surface)
   core.ts             start / wait / stop / collect / select / commit / synthesize / adopt / clean
+  refine.ts           task refinement brief + specification template (the host does the asking)
   session.ts          JSON session state (zod schema)
   config.ts           config.yaml / .arena.yaml
   git/                repository, worktree, diff

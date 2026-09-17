@@ -51,7 +51,9 @@ export function renderStatus(session: Session, now = Date.now()): string {
 }
 
 export function renderSummary(session: Session): string {
-  const lines = [`Arena ${session.id} complete`, "", `Task: ${firstLine(session.task)}`, `Base: ${session.baseCommit.slice(0, 12)}${session.baseBranch ? ` (${session.baseBranch})` : ""}`]
+  const lines = [`Arena ${session.id} complete`, "", `Task: ${firstLine(session.task)}`]
+  if (session.taskMode === "refined") lines.push(`Mode: refined specification${session.originalTask ? ` (original request: ${firstLine(session.originalTask)})` : ""}`)
+  lines.push(`Base: ${session.baseCommit.slice(0, 12)}${session.baseBranch ? ` (${session.baseBranch})` : ""}`)
   if (session.setup.length) lines.push(`Setup: ${session.setup.join(" && ")}`)
   lines.push("")
   for (const p of session.players) {
@@ -102,7 +104,7 @@ export function renderCompareBundle(session: Session, opts: CompareBundleOptions
   out.push(`# Arena ${session.id} — implementation comparison`, "")
   out.push(`Base commit: ${session.baseCommit}${session.baseBranch ? ` (${session.baseBranch})` : ""}`)
   out.push(`Repository: ${session.repository}`, "")
-  out.push("## Original task", "", session.task.trim(), "")
+  pushTaskSections(out, session)
   out.push("## Verification commands", "")
   for (const kind of ["test", "lint", "typecheck"] as const) {
     out.push(`- ${kind}: ${session.verify[kind] ? "`" + session.verify[kind] + "`" : "(none)"}`)
@@ -166,7 +168,7 @@ export function renderSynthesisBrief(session: Session, base: Player, others: Pla
   out.push(`Branch:         ${base.branch}${session.synthesis?.snapshotCommit ? ` (snapshot ${session.synthesis.snapshotCommit.slice(0, 12)})` : ""}`)
   out.push(`Base commit:    ${session.baseCommit}`)
   out.push("")
-  out.push("## Task", "", session.task.trim(), "")
+  pushTaskSections(out, session)
   out.push("## Procedure", "")
   out.push(`1. Edit only inside ${base.worktree}. Keep the base candidate's structure; fold in the strengths of the other candidate(s) listed below.`)
   out.push(`2. Re-verify: arena collect ${session.id} --player ${base.id}`)
@@ -201,6 +203,20 @@ export function renderSynthesisBrief(session: Session, base: Player, others: Pla
     else out.push("```diff", diff, "```", "")
   }
   return out.join("\n")
+}
+
+/**
+ * Task sections shared by the compare bundle and the synthesis brief. In refined mode the runners
+ * saw only the specification; the original request is shown so reviewers can judge whether the
+ * refinement (and the candidates) still serve what the user asked for.
+ */
+function pushTaskSections(out: string[], session: Session): void {
+  if (session.taskMode === "refined") {
+    out.push("## Task (refined specification, as given to the runners)", "", session.task.trim(), "")
+    if (session.originalTask) out.push("## Original request (before refinement; not shown to the runners)", "", session.originalTask.trim(), "")
+  } else {
+    out.push("## Original task", "", session.task.trim(), "")
+  }
 }
 
 function tail(s: string, maxChars: number): string {

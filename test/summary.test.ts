@@ -10,6 +10,7 @@ const session: Session = {
   baseBranch: "main",
   baseCommit: "0123456789abcdef",
   task: "Do the thing\nwith details",
+  taskMode: "simple",
   status: "collected",
   arenaDir: "/arena/repo/20260917-abc123",
   startedAt: "2026-09-17T00:00:00.000Z",
@@ -89,6 +90,20 @@ test("renderCompareBundle includes task, criteria and per-candidate sections", (
 })
 
 import { renderSynthesisBrief } from "../src/compare/summary.ts"
+
+test("refined mode shows the specification and the original request to reviewers only", () => {
+  const refined: Session = { ...session, taskMode: "refined", task: "# Add reset\n\n## Goal\nSend mail", originalTask: "add password reset" }
+  const summary = renderSummary(refined)
+  assert.match(summary, /Task: # Add reset\nMode: refined specification \(original request: add password reset\)\nBase:/)
+  assert.doesNotMatch(renderSummary(session), /Mode:/)
+  const bundle = renderCompareBundle(refined)
+  assert.match(bundle, /## Task \(refined specification, as given to the runners\)\n\n# Add reset\n\n## Goal\nSend mail\n\n## Original request \(before refinement; not shown to the runners\)\n\nadd password reset\n\n## Verification commands/)
+  assert.doesNotMatch(bundle, /## Original task/)
+  const brief = renderSynthesisBrief(refined, refined.players[0]!, [refined.players[1]!])
+  assert.match(brief, /## Task \(refined specification, as given to the runners\)/)
+  assert.match(brief, /## Original request \(before refinement; not shown to the runners\)\n\nadd password reset/)
+  assert.match(renderSynthesisBrief(session, session.players[0]!, []), /## Original task\n\nDo the thing/)
+})
 
 test("renderSynthesisBrief names the base worktree and includes the other candidate", () => {
   const withSynthesis: Session = { ...session, synthesis: { base: "claude", startedAt: "2026-09-17T00:08:00.000Z", snapshotCommit: "abcdef123456789" } }

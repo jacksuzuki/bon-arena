@@ -28,15 +28,22 @@ import { resolveSetupCommands, resolveVerifyCommands } from "./verification/dete
 import { loadConfig } from "./config.ts"
 import { sessionFile } from "./paths.ts"
 import { installSkill } from "./install.ts"
+import { buildRefineContext, defaultTaskMode, renderRefineBrief } from "./refine.ts"
 
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
 
 Usage:
   arena install-skill [--force] [--config-dir <path>]
                                                     Install the Claude Code /arena skill (no repository required)
-  arena doctor [--repo <path>]                      Check runner availability and detected verify commands
+  arena doctor [--repo <path>]                      Check runner availability, detected verify commands and the task mode default
+  arena refine --task <text>|--task-file <f> [--repo <path>] [--no-draft] [--json]
+                                                    Print the refinement brief: repository facts, procedure and specification
+                                                    template for turning the request into a one-shot task (host does the asking)
   arena start --task <text>|--task-file <f> [--players claude,codex] [--repo <path>] [--setup <cmd>|--no-setup]
-                                                    Create session + worktrees, run setup (e.g. npm ci), launch runners
+              [--original-task <text>|--original-task-file <f>]
+                                                    Create session + worktrees, run setup (e.g. npm ci), launch runners.
+                                                    With --original-task* the task is a refined specification (refined mode);
+                                                    without it the task goes to the runners verbatim (simple mode)
   arena status <id|latest> [--json]                 Show runner progress
   arena wait <id|latest> [--timeout <sec>] [--json] Block until every runner finishes
   arena stop <id|latest>                            Terminate running runners
@@ -59,6 +66,8 @@ Usage:
                                                     Remove worktrees (and branches); --force also deletes logs/session dir
 
 Common options:
+  --original-task <text> / --original-task-file <f>
+                                         The user's request as typed, recorded next to the refined task (refined mode)
   --test/--lint/--typecheck <cmd|false>  Override verification commands (false disables)
   --setup <cmd> / --no-setup             Worktree preparation command (default: .arena.yaml setup or lockfile detection)
   --json                                 Machine-readable output
@@ -98,6 +107,23 @@ function readTask(values: { task?: string; "task-file"?: string }, positionals: 
     if (buf.trim()) return buf
   }
   return fail("task is required (--task, --task-file, positional text, or stdin)")
+}
+
+/** The user's request as typed (refined mode). Undefined means simple mode. */
+function readOriginalTask(values: { "original-task"?: string; "original-task-file"?: string }): string | undefined {
+  if (values["original-task"] && values["original-task-file"]) fail("use either --original-task or --original-task-file, not both")
+  if (values["original-task-file"]) {
+    const p = resolve(values["original-task-file"])
+    if (!existsSync(p)) fail(`original task file not found: ${p}`)
+    const text = readFileSync(p, "utf8")
+    if (!text.trim()) fail(`original task file is empty: ${p}`)
+    return text
+  }
+  if (values["original-task"] !== undefined) {
+    if (!values["original-task"].trim()) fail("--original-task must not be empty")
+    return values["original-task"]
+  }
+  return undefined
 }
 
 function parsePlayers(v: string | undefined): string[] {
@@ -144,8 +170,9 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   const runners = await checkRunners(root)
   const verify = repoInfo ? resolveVerifyCommands(root, loadConfig(root).verify) : {}
   const setup = repoInfo ? resolveSetupCommands(root, loadConfig(root).setup, undefined) : []
+  const taskMode = defaultTaskMode(root)
   if (values.json) {
-    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup }, null, 2))
+    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup, taskMode, refine: taskMode === "refined" }, null, 2))
     return
   }
   print("Arena doctor")
@@ -165,8 +192,29 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   print("")
   print("worktree setup")
   print(`  ${setup.length ? setup.join(" && ") : "(none)"}`)
+  print("")
+  print("task mode")
+  print(`  ${taskMode === "refined" ? "refined (host clarifies the request before launching; use simple mode to skip)" : "simple (config refine: false; request is passed verbatim)"}`)
   const missing = runners.filter((r) => !r.available && (r.id === "claude" || r.id === "codex"))
   if (missing.length) process.exitCode = 1
+}
+
+function cmdRefine(argv: Argv): void {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      task: { type: "string", short: "t" },
+      "task-file": { type: "string" },
+      repo: { type: "string" },
+      "no-draft": { type: "boolean" },
+      json: { type: "boolean" },
+    },
+  })
+  const task = readTask(values, positionals)
+  const ctx = buildRefineContext({ repo: resolve(values.repo ?? process.cwd()), task, saveDraft: !values["no-draft"] })
+  if (values.json) print(JSON.stringify(ctx, null, 2))
+  else print(renderRefineBrief(ctx))
 }
 
 async function cmdStart(argv: Argv): Promise<Session> {
@@ -176,6 +224,8 @@ async function cmdStart(argv: Argv): Promise<Session> {
     options: {
       task: { type: "string", short: "t" },
       "task-file": { type: "string" },
+      "original-task": { type: "string" },
+      "original-task-file": { type: "string" },
       players: { type: "string", short: "p" },
       repo: { type: "string" },
       test: { type: "string" },
@@ -187,9 +237,11 @@ async function cmdStart(argv: Argv): Promise<Session> {
     },
   })
   const task = readTask(values, positionals)
+  const originalTask = readOriginalTask(values)
   const session = await startArena({
     repo: resolve(values.repo ?? process.cwd()),
     task,
+    originalTask,
     players: parsePlayers(values.players),
     verify: verifyOverridesFrom(values),
     setup: values["no-setup"] ? false : values.setup,
@@ -200,6 +252,7 @@ async function cmdStart(argv: Argv): Promise<Session> {
   } else {
     print(`Arena ${session.id} started`)
     print(`base     ${session.baseCommit.slice(0, 12)}${session.baseBranch ? ` (${session.baseBranch})` : ""}`)
+    print(`task     ${session.taskMode === "refined" ? "refined specification (original request recorded)" : "simple mode (request passed verbatim)"}`)
     for (const p of session.players) print(`${p.label.padEnd(8)} ${p.branch}  ${p.worktree}`)
     print(`\nNext: arena wait ${session.id}`)
   }
@@ -462,6 +515,8 @@ async function main(): Promise<void> {
         return cmdInstallSkill(rest)
       case "doctor":
         return await cmdDoctor(rest)
+      case "refine":
+        return cmdRefine(rest)
       case "start":
         await cmdStart(rest)
         return
