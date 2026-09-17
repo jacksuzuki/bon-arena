@@ -46,7 +46,7 @@ Claude Code の skill は PATH 上の `arena` を呼び、無ければ `npx ccc-
 
 ### GitHub や checkout から使う
 
-コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/ccc-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/ccc-arena arena doctor` です。`#v0.2.0` でバージョンを固定できます。開発用:
+コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/ccc-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/ccc-arena arena doctor` です。`#v0.2.1` でバージョンを固定できます。開発用:
 
 ```bash
 git clone https://github.com/jacksuzuki/ccc-arena.git

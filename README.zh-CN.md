@@ -46,7 +46,7 @@ Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到 `npx cc
 
 ### 从 GitHub 或 checkout 使用
 
-编译后的 CLI（`dist/`）已提交到仓库，因此从仓库安装也不需要构建步骤：`npm install -g --install-links github:jacksuzuki/ccc-arena`（该参数是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink 并随即删除该克隆）或 `npx --package github:jacksuzuki/ccc-arena arena doctor`。可用 `#v0.2.0` 固定版本。开发用：
+编译后的 CLI（`dist/`）已提交到仓库，因此从仓库安装也不需要构建步骤：`npm install -g --install-links github:jacksuzuki/ccc-arena`（该参数是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink 并随即删除该克隆）或 `npx --package github:jacksuzuki/ccc-arena arena doctor`。可用 `#v0.2.1` 固定版本。开发用：
 
 ```bash
 git clone https://github.com/jacksuzuki/ccc-arena.git
