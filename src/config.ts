@@ -32,6 +32,11 @@ export const ArenaConfigSchema = z.object({
   runners: z.record(z.string(), RunnerConfigSchema).default({}),
   verify: VerifyConfigSchema.default({}),
   setup: SetupConfigSchema,
+  /**
+   * Whether hosts should refine the user's request into a one-shot specification before launching
+   * (default true). `false` makes simple mode (task passed verbatim) the default.
+   */
+  refine: z.boolean().optional(),
 })
 export type ArenaConfig = z.infer<typeof ArenaConfigSchema>
 
@@ -64,5 +69,6 @@ export function loadConfig(repoPath: string): ArenaConfig {
     runners,
     verify: { ...user.verify, ...repo.verify },
     setup: repo.setup !== undefined ? repo.setup : user.setup,
+    refine: repo.refine !== undefined ? repo.refine : user.refine,
   }
 }

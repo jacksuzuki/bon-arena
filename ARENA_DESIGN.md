@@ -132,13 +132,55 @@ Task?
 > Better Auth を導入して既存認証処理を置き換えてください
 ```
 
+### タスクの洗練（refine）
+
+ユーザーが入力したプロンプトはそのまま runner に渡さない。
+runner はヘッドレスで質問できないため、曖昧な点はすべて runner の推測になり、
+2 つの candidate が別の前提で作られて比較にならない。
+
+そこで host（Claude Code）が起動前に次を行う。
+
+1. 要求を理解し、関係するコードを読む（読み取りのみ）
+2. runner が推測することになる点を洗い出す（範囲、対象ファイル、エッジケース、命名、互換性、テスト）
+3. コードや慣習から決められるものは host が決める
+4. 残りだけをユーザーに聞く（選択肢と推奨値付き、まとめて、最大 2 ラウンド）
+5. 仕様（Goal / Background / Scope / Requirements / Acceptance criteria / Constraints / Verification / Decisions）を書く
+   - 「何が満たされるべきか」は具体的に、「どう実装するか」は runner に委ねる（比較の余地を残す）
+   - runner は HEAD から始まるため、未コミットの変更を前提にしない
+   - 空のセクションは省き、詳細度はタスクの規模に合わせる
+6. ユーザーが承認してから起動する（承認前に worktree 作成・setup・runner 起動をしない。
+   修正・元の依頼のまま送る・キャンセルも選べる）
+
+```text
+Task?
+> Better Auth を導入して既存認証処理を置き換えてください
+
+(host がコードを読み、不明点を質問)
+  - セッションストアは既存の Redis を使いますか？  ❯ はい / いいえ
+  - 既存のログイン API のパスは維持しますか？      ❯ 維持 / 変更可
+
+(host が仕様を提示)
+Launch with this specification?
+❯ Launch / Edit / Use the original request as is
+```
+
+runner が受け取るのは洗練後の仕様だけ。元の要求は session に `originalTask` として保存し、
+`arena compare` でレビュアーに仕様と並べて見せる。
+
+この工程を省く **simple mode** も用意する（`/arena simple <task>`、または `.arena.yaml` の
+`refine: false` で既定化）。simple mode では入力をそのまま runner に渡す。
+
+Core は LLM を呼ばない。`arena refine` は host 向けの brief（リポジトリ情報、手順、仕様テンプレート）を
+出力し、元の要求を `~/.arena/drafts/` に保存するだけで、質問と仕様作成は host の責務。
+`arena start --original-task-file <path>` で refined mode として記録する。
+
 ### 実行イメージ
 
 ```text
 Claude Code
   ↓
 /arena Skill
-  ↓
+  ↓ (refine: 理解 → 質問 → 仕様化 → 承認)
 Arena Core
   ├── Git worktree A
   │     └── Claude
@@ -248,6 +290,8 @@ runner selection
   ↓
 task input
   ↓
+task refinement (host; simple mode では省略)
+  ↓
 arena session 作成
   ↓
 base commit 確定
@@ -314,7 +358,9 @@ repo path
 base branch
 base commit SHA
 arena id
-task
+task            (runner に渡した内容。refined mode では仕様)
+taskMode        (refined | simple)
+originalTask    (refined mode のみ。ユーザーの入力そのまま)
 runner list
 worktree paths
 branch names

@@ -19,7 +19,13 @@ import { runAllVerifications, runVerification, DEFAULT_VERIFY_TIMEOUT_MS, type V
 
 export interface StartOptions {
   repo: string
+  /** What the runners are asked to implement: the refined specification, or the raw request in simple mode. */
   task: string
+  /**
+   * The user's request as typed. Providing it marks the session as refined: `task` is treated as a
+   * specification the host produced from this request (see `arena refine`). Omit for simple mode.
+   */
+  originalTask?: string
   players: string[]
   verify?: VerifyOverrides
   /** Worktree preparation commands; `false` skips, undefined uses config / auto-detection. */
@@ -78,6 +84,9 @@ export async function startArena(opts: StartOptions): Promise<Session> {
     log("warning: repository has uncommitted changes; candidates start from HEAD and will not see them")
   }
 
+  const originalTask = opts.originalTask?.trim() || undefined
+  const taskMode = originalTask !== undefined ? "refined" : "simple"
+
   const id = newArenaId()
   const dir = arenaDir(repo.projectName, id)
   const logsDir = join(dir, "logs")
@@ -85,6 +94,7 @@ export async function startArena(opts: StartOptions): Promise<Session> {
   mkdirSync(logsDir, { recursive: true })
   mkdirSync(resultsDir, { recursive: true })
   writeFileSync(join(dir, "task.md"), opts.task.trim() + "\n")
+  if (originalTask !== undefined) writeFileSync(join(dir, "task.original.md"), originalTask + "\n")
 
   const verify = resolveVerifyCommands(repo.root, config.verify, opts.verify)
   const setup = resolveSetupCommands(repo.root, config.setup, opts.setup)
@@ -97,6 +107,8 @@ export async function startArena(opts: StartOptions): Promise<Session> {
     baseBranch: repo.branch,
     baseCommit: repo.headCommit,
     task: opts.task.trim(),
+    taskMode,
+    originalTask,
     status: "created",
     players: [],
     verify,
@@ -170,8 +182,8 @@ export async function startArena(opts: StartOptions): Promise<Session> {
     log(`setup done (${results.map((p) => `${p.label} ${Math.round((p.setup?.durationMs ?? 0) / 1000)}s`).join(", ")})`)
   }
 
-  // 3. run
-  const prompt = buildArenaPrompt(session.task)
+  // 3. run — runners receive only `task`; in refined mode the original request stays with the session
+  const prompt = buildArenaPrompt(session.task, { refined: taskMode === "refined" })
   for (let i = 0; i < runners.length; i++) {
     const runner = runners[i]!
     const player = session.players[i]!

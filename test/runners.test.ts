@@ -57,4 +57,12 @@ test("arena prompt embeds the task verbatim after shared rules", () => {
   const p = buildArenaPrompt("Line 1\nLine 2")
   assert.ok(p.startsWith("You are participating in an implementation arena."))
   assert.ok(p.endsWith("TASK:\nLine 1\nLine 2\n"))
+  assert.doesNotMatch(p, /refined together with the user/)
+})
+
+test("arena prompt marks a refined specification as authoritative", () => {
+  const p = buildArenaPrompt("# Spec", { refined: true })
+  assert.ok(p.endsWith("TASK:\n# Spec\n"))
+  assert.match(p, /specification that was refined together with the user[\s\S]*Treat it as authoritative/)
+  assert.equal(buildArenaPrompt("# Spec", { refined: false }), buildArenaPrompt("# Spec"))
 })

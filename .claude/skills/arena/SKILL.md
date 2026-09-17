@@ -1,14 +1,15 @@
 ---
 name: arena
-description: Run an implementation arena - two coding agents (Claude Code, Codex CLI, or custom runners) implement the same task in separate git worktrees, then compare diffs, tests, lint and typecheck results and let the user pick. Use when the user types /arena, wants to "compare Claude vs Codex", "race agents", or "try two implementations".
-argument-hint: "[task text | status | list | resume <id> | compare <id> | clean <id>]"
+description: Run an implementation arena - two coding agents (Claude Code, Codex CLI, or custom runners) implement the same task in separate git worktrees, then compare diffs, tests, lint and typecheck results and let the user pick. By default the request is first refined with the user into a one-shot specification ("simple" skips that). Use when the user types /arena, wants to "compare Claude vs Codex", "race agents", or "try two implementations".
+argument-hint: "[task text | simple <task> | refine <task> | status | list | resume <id> | compare <id> | clean <id>]"
 ---
 
 # Arena
 
 You are the **host harness** for Arena. Arena Core (the `arena` CLI) does the isolation, process
 management, result collection and verification. You do the conversation: choose players, capture the
-task, launch, report progress, and help the user compare and decide. Never re-implement Core logic.
+task, **refine it into a specification the runners can implement in one shot**, launch, report
+progress, and help the user compare and decide. Never re-implement Core logic.
 
 ## Ground rules
 
@@ -22,26 +23,36 @@ task, launch, report progress, and help the user compare and decide. Never re-im
 - Never push, and never merge, cherry-pick or delete branches without an explicit user decision.
   `arena adopt` merges only after the user says so. Cleaning is destructive: confirm first.
 - Runners are already running with auto-approval inside their own worktrees. Do not start extra ones.
+- Runners are headless: they cannot ask questions. Whatever is unclear when they start becomes a
+  guess. That is why the task is refined **before** launch (step 4), never after.
 - Session ids look like `20260917-abc123`. `latest` is accepted everywhere.
 
 ## Route on `$ARGUMENTS`
 
 | `$ARGUMENTS` starts with | Do |
 |---|---|
-| (empty) or task text | New arena (flow below). Use the text as the task if it is clearly a task. |
+| (empty) or task text | New arena (flow below) in the default task mode (refined unless `.arena.yaml` sets `refine: false`). Use the text as the task if it is clearly a task. |
+| `simple <task>` or `--simple <task>` | New arena in **simple mode**: skip step 4 and pass the task verbatim. |
+| `refine <task>` or `--refine <task>` | New arena in **refined mode** even when the config default is simple. |
+| `-- <task>` | Literal task text: everything after `--` is the task even if it starts with a keyword above (e.g. `/arena -- simple retry logic for the client`). |
 | `status [id]` | `arena status <id|latest>` and report. |
 | `list` | `arena list` and report. |
-| `resume <id>` / `wait <id>` | Continue from step 4 with that id. |
+| `resume <id>` / `wait <id>` | Continue from step 6 with that id. |
 | `compare <id>` | Jump to the Compare step. |
 | `clean <id>` | Confirm, then `arena clean <id>`. |
+
+Mode keywords are recognised only as the leading token; a `simple` or `refine` inside the task text
+is just text. Modes apply to new arenas only: status, resume, compare and clean never refine or
+relaunch an existing session's task. `simple` / `refine` are host options, never passed to the CLI.
 
 ## New arena flow
 
 ### 1. Preflight
 
 Run `arena doctor --json` in the repository root. Read `runners[]` (id, label, available),
-`verify` (detected test/lint/typecheck commands) and `setup` (worktree preparation such as
-`npm ci`, run before the runners start). If the repo is not a git repo or has no commits,
+`verify` (detected test/lint/typecheck commands), `setup` (worktree preparation such as
+`npm ci`, run before the runners start) and `taskMode` (`refined` or `simple`: the default when the
+user did not choose one on the command line). If the repo is not a git repo or has no commits,
 stop and explain. If the working tree is dirty, warn: candidates start from HEAD and will not see
 uncommitted changes.
 
@@ -58,19 +69,88 @@ If a chosen runner is unavailable, say which command is missing and ask again.
 ### 3. Task
 
 If `$ARGUMENTS` already contains the task, confirm it in one line. Otherwise ask the user in plain
-text: "Task?" and wait. Do not paraphrase the task; pass it verbatim. Then show a one-screen launch
-summary (repo, base branch and commit, players, setup and verification commands) and launch:
+text: "Task?" and wait. Never paraphrase what the user typed: this text is the **original request**
+and is recorded as such. Then:
+
+- **Simple mode** → go to step 5 with the original request as the task.
+- **Refined mode** (default) → step 4.
+
+### 4. Refine (skipped in simple mode)
+
+Goal: turn the request into a specification that two independent, headless runners could implement
+in one pass without guessing. You clarify; you do **not** implement anything here, and you do not
+create worktrees, run setup or launch runners until the user confirms in step 4.7.
+
+1. Run `arena refine` with the original request. It saves the request as a draft file (path in the
+   output), prints repository facts and the specification template, and is the procedure to follow:
+
+   ```bash
+   arena refine <<'ARENA_TASK'
+   <original request verbatim>
+   ARENA_TASK
+   ```
+
+2. **Understand.** Restate the request in one sentence. Read the code it touches (read-only, in the
+   user's checkout): entry points, the modules to change, existing tests, naming and error-handling
+   conventions. Use subagents for broad searches if the repo is large. Candidates start from the
+   preflight HEAD: if a relevant file is dirty or untracked, look at the committed version
+   (`git show HEAD:<path>`) and do not base the specification on changes the runners will not get.
+3. **Find the gaps.** List every decision a runner would otherwise have to guess: scope boundaries,
+   affected files/modules, behavior in edge cases, public API and naming, backward compatibility,
+   user-facing text, expected tests, what must not change.
+4. **Settle what you can** from the code, the project's conventions and sensible defaults. Keep a
+   note of each decision.
+5. **Ask only what remains** with AskUserQuestion: batch up to four questions per call, each with
+   concrete options and a recommended default; at most two rounds. If the user defers ("you decide",
+   "お任せ"), choose and record the choice. If nothing is genuinely unclear, ask nothing and say so.
+6. **Write the specification** using the template `arena refine` printed (Goal, Background, Scope
+   in/out, Requirements, Acceptance criteria, Constraints, Verification, Decisions); omit sections
+   that would be empty. Integrate the answers; no Q&A transcript. Keep the user's language and the
+   user's exact identifiers and examples. Be concrete about *what*: name files, functions, commands,
+   messages, edge cases, and include the verification commands from `arena doctor`. Do not
+   over-prescribe *how*: the point of an arena is that two runners may solve it differently, so leave
+   design and implementation choices open unless the user or the codebase fixes them. Never invent
+   requirements the user did not ask for, and never resolve conflicting requirements by silently
+   dropping one — ask.
+7. **Confirm.** Show the full specification and ask with AskUserQuestion: "Launch with this
+   specification?" with options **Launch** / **Edit** (take the user's changes and show it again) /
+   **Use the original request as is** (switch to simple mode: send the original request, never a
+   half-refined draft) / **Cancel** (end without creating a session). If the user already told you
+   to launch as soon as the specification is ready, do not ask again.
+
+Scale the effort to the task: a one-line bug fix with an obvious location needs a short
+specification and no questions; a feature that touches several modules deserves the full template.
+
+### 5. Launch
+
+Show a one-screen launch summary (repo, base branch and commit, players, task mode, setup and
+verification commands), then start.
+
+Refined mode, using the draft path printed by `arena refine`:
 
 ```bash
-arena start --players <p1>,<p2> --json <<'ARENA_TASK'
-<task text verbatim>
+arena start --players <p1>,<p2> --original-task-file <draft path> --json <<'ARENA_TASK'
+<refined specification>
 ARENA_TASK
 ```
 
+Simple mode:
+
+```bash
+arena start --players <p1>,<p2> --json <<'ARENA_TASK'
+<original request verbatim>
+ARENA_TASK
+```
+
+Runners receive only the task text you pass here (plus the shared arena rules), so the text must be
+self-contained: never refer to "the discussion above". Always pass it via stdin heredoc or
+`--task-file`, never by interpolating it into a shell string; pick a heredoc delimiter that does not
+occur as a line of the task. In refined mode the original request is stored with the session for
+reviewers and shown in `arena compare`.
 Report the session id, branches and worktree paths from the JSON. If `start` fails with
 "setup failed", show the setup log it names and offer `--no-setup` or a `.arena.yaml` `setup` entry.
 
-### 4. Wait
+### 6. Wait
 
 Runners take minutes. Run the wait in the background so the Bash timeout does not cut it off:
 
@@ -82,14 +162,14 @@ arena wait <id> --interval 30
 status any time (`arena status <id>`). Do not poll in a loop yourself; the background task notifies
 you when it finishes. If the user asks to abort, run `arena stop <id>`.
 
-### 5. Collect
+### 7. Collect
 
 When wait finishes, run `arena collect <id>` (also in the background if verification is slow).
 It computes diff stats and runs test / lint / typecheck **independently of what the runners
 claimed**. Show its summary block verbatim in a fenced code block. If a runner status is `failed`,
 show the last lines of `arena logs <id> <player> --stderr --tail 40`.
 
-### 6. What next?
+### 8. What next?
 
 Ask with AskUserQuestion, in this order (the first option is the default):
 
@@ -104,14 +184,16 @@ Mention that "Keep both" and "Clean arena" are also available if the user asks.
 **Compare** (used by both of the first two options): run `arena compare <id>` and review the
 bundle it prints. Judge both candidates on: correctness, task completeness, regression risk,
 architecture fit, code complexity, adherence to existing conventions, test quality, unnecessary
-changes. Do not trust the runners' own claims: read files inside the worktrees (read-only) and, when
-a claim matters (e.g. "installs cleanly", "works after X"), actually try it on a copy of the
+changes. In refined mode the bundle contains both the specification and the original request:
+judge completeness against the specification, and check that the result still serves the original
+request. Do not trust the runners' own claims: read files inside the worktrees (read-only) and,
+when a claim matters (e.g. "installs cleanly", "works after X"), actually try it on a copy of the
 worktree in a temp dir. Write a concise comparison: a short table of facts, per criterion which
 candidate is stronger and why, then name the recommended base **and list the concrete strengths of
 the other candidate worth folding in** (specific files, functions, tests, docs).
 
 **Compare only**: after the comparison ask "Select candidate?" with <Player 1> / <Player 2> / None,
-then go to step 8.
+then go to step 10.
 
 **Inspect diff**: run `arena diff <id> <player>` and walk the user through it, then return to this
 question.
@@ -120,7 +202,7 @@ question.
 
 **Clean arena**: confirm ("removes worktrees and unselected branches"), then `arena clean <id>`.
 
-### 7. Synthesize
+### 9. Synthesize
 
 1. After the comparison, confirm the base with AskUserQuestion: "Base candidate?" — recommended
    candidate first, the other second, "Stop here" third.
@@ -137,9 +219,9 @@ question.
 5. Commit with `arena commit <id> <base> -m "arena(<id>): synthesis — <one line>"` and run
    `arena finish <id>`.
 6. Summarize what the final version contains: what came from the base, what was folded in from
-   the other candidate, what you changed yourself. Then go to step 8.
+   the other candidate, what you changed yourself. Then go to step 10.
 
-### 8. Integrate
+### 10. Integrate
 
 Ask with AskUserQuestion: "Merge into <base branch> now?" with options
 "Merge (arena adopt)" / "Squash merge" / "Not now, keep the branch".
@@ -153,8 +235,11 @@ Finally offer to clean the arena (`arena clean <id>`, the selected branch is kep
 ## Reference
 
 ```
-arena doctor [--repo <path>] [--json]
-arena start --players a,b (--task <t> | --task-file <f> | stdin) [--setup <cmd>|--no-setup] [--json]
+arena doctor [--repo <path>] [--json]                 (json includes taskMode: refined|simple)
+arena refine (--task <t> | --task-file <f> | stdin) [--no-draft] [--json]
+arena start --players a,b (--task <t> | --task-file <f> | stdin)
+            [--original-task <t> | --original-task-file <f>]   (present = refined mode)
+            [--setup <cmd>|--no-setup] [--json]
 arena status|wait|stop|summary|inspect <id|latest>
 arena collect <id> [--no-verify] [--test <cmd>|false] [--lint ...] [--typecheck ...]
 arena compare <id> [--max-diff-bytes <n>]
@@ -165,4 +250,6 @@ arena list [--all]              arena clean <id> [--keep-branches] [--force]
 ```
 
 State lives in `~/.arena/sessions/<id>.json`; worktrees, logs and diffs in
-`~/.arena/<project>/<id>/`. Repository config: `.arena.yaml` (`runners`, `verify`, `setup`).
+`~/.arena/<project>/<id>/` (`task.md` is what the runners got, `task.original.md` the request
+before refinement); drafts from `arena refine` in `~/.arena/drafts/`. Repository config:
+`.arena.yaml` (`runners`, `verify`, `setup`, `refine: false` to default to simple mode).

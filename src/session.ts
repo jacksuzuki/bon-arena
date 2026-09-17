@@ -82,7 +82,15 @@ export const SessionSchema = z.object({
   projectName: z.string(),
   baseBranch: z.string().nullable(),
   baseCommit: z.string(),
+  /** The task handed to the runners (the refined specification in refined mode). */
   task: z.string(),
+  /**
+   * "refined": the host turned the user's request into a one-shot specification before launching;
+   * "simple": the request was passed to the runners verbatim.
+   */
+  taskMode: z.enum(["refined", "simple"]).default("simple"),
+  /** The user's request as typed, kept for reviewers when `task` is a refined specification. */
+  originalTask: z.string().optional(),
   status: SessionStatusSchema,
   players: z.array(PlayerSchema),
   verify: VerifyCommandsSchema,
