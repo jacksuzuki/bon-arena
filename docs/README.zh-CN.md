@@ -223,10 +223,10 @@ arena logs latest claude --follow   # 在任意终端查看同样的实时输出
 | Runner | 调用方式 |
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'`（提示词通过 stdin） |
-| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c sandbox_workspace_write.network_access=true -c approval_policy="never" -o <results>/codex.last-message.md -` |
 | Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
-无交互运行无法回答权限确认，因此 Claude 以跳过权限的方式运行；隔离来自专用 worktree，而不是权限系统。每个 runner 由一个分离的 supervisor 进程监管并记录退出码，因此 `arena` 命令可以退出后再回来（`arena wait`、`arena status`）。`arena stop` 会终止整个进程组。
+无交互运行无法回答权限确认，因此 Claude 以跳过权限的方式运行；隔离来自专用 worktree，而不是权限系统。Codex 仍使用 `workspace-write` 沙箱（写入限制在 worktree 内），但开启了网络访问：否则沙箱连 localhost 上的 `listen()` 都会拒绝，Codex 就无法像其他 runner 那样启动 dev server 来检查自己的实现。如需关闭，可为 `codex` 设置 `extraArgs: ["-c", "sandbox_workspace_write.network_access=false"]`。每个 runner 由一个分离的 supervisor 进程监管并记录退出码，因此 `arena` 命令可以退出后再回来（`arena wait`、`arena status`）。`arena stop` 会终止整个进程组。
 
 `agy` 不在进程的当前目录中工作，也无法从 stdin 读取提示词，因此 worktree 通过 `--add-dir` 传入，提示词作为单个 `-p=<prompt>` 参数传入。它的 print 模式默认 5 分钟后中止，所以显式指定 `--print-timeout`；输出使用 `stream-json`，因为会话 id 出现在其中（runner 的日志是 NDJSON，而不是纯文本）。
 

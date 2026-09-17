@@ -288,11 +288,15 @@ original request is not part of the prompt, so the runners cannot re-interpret i
 | Runner | Invocation |
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'` (prompt on stdin) |
-| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c sandbox_workspace_write.network_access=true -c approval_policy="never" -o <results>/codex.last-message.md -` |
 | Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
 Headless runs cannot answer permission prompts, so Claude runs with permissions skipped; isolation
-comes from the dedicated worktree, not from the permission system. Each runner is supervised by a
+comes from the dedicated worktree, not from the permission system. Codex keeps its `workspace-write`
+sandbox (writes stay inside the worktree) with network access turned on: without it the sandbox
+refuses even `listen()` on localhost, so Codex could not start a dev server to check its own work the
+way the other runners can. To close it again, set
+`extraArgs: ["-c", "sandbox_workspace_write.network_access=false"]` for `codex`. Each runner is supervised by a
 detached process that records the exit code, so `arena` commands can exit and come back later
 (`arena wait`, `arena status`). `arena stop` kills the whole process group.
 
