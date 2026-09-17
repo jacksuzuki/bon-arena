@@ -19,6 +19,9 @@ Claude Code (/arena)
 Arena Core is a small, harness-independent CLI. The Claude Code `/arena` skill is the first host;
 other hosts (Codex, standalone use, other harnesses) can drive the same CLI.
 
+> **Security:** the built-in runners run with full permissions — no approval prompts, no sandbox.
+> Use Arena on code you trust, or inside a container or VM. See [Security](#security).
+
 ## Requirements
 
 - Node.js >= 22.18 (or Bun; the code uses only Node-compatible APIs)
@@ -288,15 +291,11 @@ original request is not part of the prompt, so the runners cannot re-interpret i
 | Runner | Invocation |
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'` (prompt on stdin) |
-| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c sandbox_workspace_write.network_access=true -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Codex  | `codex exec -C <worktree> --dangerously-bypass-approvals-and-sandbox -o <results>/codex.last-message.md -` |
 | Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
-Headless runs cannot answer permission prompts, so Claude runs with permissions skipped; isolation
-comes from the dedicated worktree, not from the permission system. Codex keeps its `workspace-write`
-sandbox (writes stay inside the worktree) with network access turned on: without it the sandbox
-refuses even `listen()` on localhost, so Codex could not start a dev server to check its own work the
-way the other runners can. To close it again, set
-`extraArgs: ["-c", "sandbox_workspace_write.network_access=false"]` for `codex`. Each runner is supervised by a
+Headless runs cannot answer permission prompts, so every built-in runner runs with permissions
+skipped and no sandbox — see [Security](#security). Each runner is supervised by a
 detached process that records the exit code, so `arena` commands can exit and come back later
 (`arena wait`, `arena status`). `arena stop` kills the whole process group.
 
@@ -310,6 +309,32 @@ runner started from inside Claude Code does not think it is nested. Claude Code 
 by repository, so a runner inside a worktree would otherwise read and write the host project's
 memory; the Claude runner therefore passes `--settings '{"autoMemoryEnabled":false}'` and sets
 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`.
+
+### Security
+
+**Built-in runners run with full permissions: no approval prompts and no sandbox.** A runner can
+read, change and run anything your user account can — files outside the worktree, your credentials,
+the network. The dedicated worktree keeps the candidates' changes apart; it is not a security
+boundary, and the rules in the prompt ("work only inside the worktree", "do not push") are
+instructions, not enforcement.
+
+This is deliberate. A headless run cannot answer a permission prompt, so the alternative to full
+permissions is a sandbox the agent cannot ask to leave — and an agent in that position gives up on
+dev servers, browsers and package stores instead of checking its work. All players must also compete
+under the same conditions: sandboxing one runner next to an unrestricted one protects nothing and
+only handicaps it.
+
+So treat `arena run` like running the agents yourself in "yolo" mode, three at a time:
+
+- Use it on repositories, dependencies and tasks you trust. Content the agents read (code, issues,
+  web pages) can carry prompt injection.
+- For anything you do not trust, run Arena inside a container or VM.
+- `arena doctor` and every `arena start` / `arena run` print a reminder.
+
+To restrict a runner anyway, define a [custom runner](#configuration) with your own flags (for
+example `codex exec --sandbox workspace-write …` under another id) — but then the comparison is no
+longer like for like. `arena ask` and `arena review` are different: they resume the
+finished conversations read-only (see below).
 
 ### Asking a finished runner (`arena ask`)
 

@@ -33,6 +33,7 @@ import { installSkill } from "./install.ts"
 import { buildRefineContext, defaultTaskMode, renderRefineBrief } from "./refine.ts"
 import { describeHost, detectHost } from "./host.ts"
 import { followPlayer } from "./follow.ts"
+import { PERMISSIONS_NOTICE } from "./runners/index.ts"
 import { createIntegrations, integrationNotes, integrationStatuses, syncIntegrations } from "./integrations/index.ts"
 
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
@@ -212,7 +213,7 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   const integrations = integrationStatuses(loadConfig(root))
   const integrationCaveats = repoInfo ? integrationNotes(loadConfig(root), root) : []
   if (values.json) {
-    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup, taskMode, refine: taskMode === "refined", host, integrations, integrationNotes: integrationCaveats }, null, 2))
+    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, permissions: "full", verify, setup, taskMode, refine: taskMode === "refined", host, integrations, integrationNotes: integrationCaveats }, null, 2))
     return
   }
   print("Arena doctor")
@@ -226,6 +227,9 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   print("")
   print("runners")
   for (const r of runners) print(`  ${r.id.padEnd(10)} ${r.available ? "✓" : "✗"} ${r.command}${r.available ? "" : "  (not found in PATH)"}`)
+  print("")
+  print("permissions")
+  for (const line of PERMISSIONS_NOTICE) print(`  ${line}`)
   print("")
   print("verification")
   for (const k of ["test", "lint", "typecheck"] as const) print(`  ${k.padEnd(10)} ${verify[k] ?? "(none)"}`)
@@ -285,6 +289,7 @@ async function cmdStart(argv: Argv): Promise<Session> {
   })
   const task = readTask(values, positionals)
   const originalTask = readOriginalTask(values)
+  process.stderr.write(`warning: ${PERMISSIONS_NOTICE[0]} See "Security" in the README.\n`)
   const session = await startArena({
     repo: resolve(values.repo ?? process.cwd()),
     task,

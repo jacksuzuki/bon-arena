@@ -8,12 +8,10 @@ import type { ArenaRunner, AskInput, RunnerInput, RunnerInvocation, SessionLooku
 /**
  * Codex CLI runner.
  *
- * Runs `codex exec` non-interactively with the workspace-write sandbox and no
- * approval prompts (the equivalent of --full-auto). The worktree is the workspace.
- *
- * Network access is turned on: the sandbox otherwise denies even listen() on localhost, so
- * Codex could not start a dev server to check its own work like the other runners do. Writes
- * stay confined to the worktree. extraArgs come later, so a config can switch it back off.
+ * Runs `codex exec` non-interactively with no sandbox and no approval prompts, like the other
+ * built-in runners (see PERMISSIONS_NOTICE). A sandboxed Codex next to an unrestricted Claude or
+ * Antigravity protected nothing and only handicapped Codex: with approvals off it cannot ask to
+ * leave the sandbox, so it gave up on dev servers, browsers and package stores.
  */
 export function createCodexRunner(config: RunnerConfig = {}): ArenaRunner {
   const command = config.command ?? "codex"
@@ -28,12 +26,7 @@ export function createCodexRunner(config: RunnerConfig = {}): ArenaRunner {
         "exec",
         "-C",
         input.cwd,
-        "--sandbox",
-        "workspace-write",
-        "-c",
-        "sandbox_workspace_write.network_access=true",
-        "-c",
-        "approval_policy=\"never\"",
+        "--dangerously-bypass-approvals-and-sandbox",
         "--color",
         "never",
         "-o",

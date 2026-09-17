@@ -17,6 +17,8 @@ Claude Code (/arena)
 
 Arena Core 是一个小巧、与宿主无关的 CLI。Claude Code 的 `/arena` skill 是第一个宿主；其他宿主（Codex、独立使用、其他 harness）也可以驱动同一个 CLI。
 
+> **安全：** 内置 runner 以完全权限运行（没有确认提示，没有沙箱）。请只用于你信任的代码，或在容器、虚拟机中运行。见[安全](#安全)。
+
 ## 环境要求
 
 - Node.js >= 22.18（或 Bun；代码只使用与 Node 兼容的 API）
@@ -223,14 +225,28 @@ arena logs latest claude --follow   # 在任意终端查看同样的实时输出
 | Runner | 调用方式 |
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'`（提示词通过 stdin） |
-| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c sandbox_workspace_write.network_access=true -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Codex  | `codex exec -C <worktree> --dangerously-bypass-approvals-and-sandbox -o <results>/codex.last-message.md -` |
 | Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
-无交互运行无法回答权限确认，因此 Claude 以跳过权限的方式运行；隔离来自专用 worktree，而不是权限系统。Codex 仍使用 `workspace-write` 沙箱（写入限制在 worktree 内），但开启了网络访问：否则沙箱连 localhost 上的 `listen()` 都会拒绝，Codex 就无法像其他 runner 那样启动 dev server 来检查自己的实现。如需关闭，可为 `codex` 设置 `extraArgs: ["-c", "sandbox_workspace_write.network_access=false"]`。每个 runner 由一个分离的 supervisor 进程监管并记录退出码，因此 `arena` 命令可以退出后再回来（`arena wait`、`arena status`）。`arena stop` 会终止整个进程组。
+无交互运行无法回答权限确认，因此所有内置 runner 都以跳过权限、无沙箱的方式运行（见[安全](#安全)）。每个 runner 由一个分离的 supervisor 进程监管并记录退出码，因此 `arena` 命令可以退出后再回来（`arena wait`、`arena status`）。`arena stop` 会终止整个进程组。
 
 `agy` 不在进程的当前目录中工作，也无法从 stdin 读取提示词，因此 worktree 通过 `--add-dir` 传入，提示词作为单个 `-p=<prompt>` 参数传入。它的 print 模式默认 5 分钟后中止，所以显式指定 `--print-timeout`；输出使用 `stream-json`，因为会话 id 出现在其中（runner 的日志是 NDJSON，而不是纯文本）。
 
 runner 的环境中会去掉 `CLAUDECODE` / `CLAUDE_CODE_*` 变量，这样从 Claude Code 内部启动的 Claude runner 不会误以为自己是嵌套运行。Claude Code 的 auto-memory 以仓库为键，worktree 中的 runner 否则会读写宿主项目的记忆；因此 Claude runner 会传入 `--settings '{"autoMemoryEnabled":false}'` 并设置 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`。
+
+### 安全
+
+**内置 runner 以完全权限运行：没有确认提示，也没有沙箱。** runner 可以读取、修改和执行你的用户账户能做的任何事，包括 worktree 之外的文件、你的凭据和网络。专用 worktree 只是把各候选的改动分开，并不是安全边界；提示词里的规则（“只在 worktree 内工作”“不要 push”）是指示，而不是强制。
+
+这是有意的设计。无交互运行无法回答权限确认，因此完全权限的替代方案是一个 agent 无法请求离开的沙箱，而处于这种状态的 agent 在 dev server、浏览器和包存储上受阻时，会直接放弃而不去检查自己的实现。此外，所有玩家必须在相同条件下竞争：在不受限制的 runner 旁边只把其中一个放进沙箱，什么也保护不了，只会让它处于劣势。
+
+请把 `arena run` 当作你自己以 “yolo” 模式同时运行三个 agent：
+
+- 只用于你信任的仓库、依赖和任务。agent 读取的内容（代码、issue、网页）可能带有提示词注入。
+- 对不信任的内容，请在容器或虚拟机中运行 Arena。
+- `arena doctor` 以及每次 `arena start` / `arena run` 都会显示提醒。
+
+如果仍想限制某个 runner，可以用自己的参数定义一个[自定义 runner](#配置)（例如用另一个 id 运行 `codex exec --sandbox workspace-write …`），但这样比较就不再是同等条件。`arena ask` 和 `arena review` 不同：它们以只读方式恢复已结束的会话（见下文）。
 
 ### 向已完成的 runner 提问（`arena ask`）
 

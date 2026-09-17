@@ -475,6 +475,20 @@ Claude と同じ共通ルールを渡す。
 
 モデル固有 prompt 差分を極力小さくし、比較条件を揃える。
 
+### 権限: 組み込み runner はすべてフル権限
+
+組み込み runner は承認プロンプトもサンドボックスもなしで起動する（Claude / Antigravity は
+`--dangerously-skip-permissions`、Codex は `--dangerously-bypass-approvals-and-sandbox`）。
+
+- ヘッドレス実行は権限の確認に答えられない。フル権限の代わりは「外に出たいと頼めないサンドボックス」で、
+  その状態の runner は dev サーバー・ブラウザ・パッケージストアで詰まると確認作業を諦める
+  （Codex を `workspace-write` + `approval_policy="never"` で動かしていた時期に実際に起きた）。
+- 比較条件を揃える。制限のない runner の隣で 1 体だけサンドボックスに入れても何も守れず、不利になるだけ。
+- worktree はセキュリティ境界ではない。README の Security 節、`arena doctor`、`arena start` で明示する
+  （`PERMISSIONS_NOTICE`）。信頼できない対象はコンテナ / VM の中で動かす。
+- 人間が都度承認する対話型の実行は、このツールの範囲外とする（Orca 専用の別ツールで扱う方針）。
+- `arena ask` / `arena review` は別で、読み取り専用で再開する。
+
 ### Antigravity Runner (`agy`)
 
 Antigravity CLI も組み込み runner として subprocess で実行する（組み込みは Claude / Codex / Antigravity の 3 つ）。

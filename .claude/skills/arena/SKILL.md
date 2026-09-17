@@ -72,6 +72,11 @@ user did not choose one on the command line) and `host` (detected harness, model
 `warnings[]`). If the repo is not a git repo or has no commits, stop and explain. If the working
 tree is dirty, warn: candidates start from HEAD and will not see uncommitted changes.
 
+`permissions` is `full`: every built-in runner runs without approval prompts or a sandbox and can do
+anything the user's account can. Say so in one sentence the first time you present the players in
+this conversation (not as a question, and not again afterwards). If the task involves code or
+dependencies the user does not trust, recommend running Arena inside a container or VM instead.
+
 If `host.warnings` is non-empty, tell the user before anything else: quote the warnings, name the
 detected model and effort, and say that the comparison and synthesis quality depends on them
 (`/model` and `/effort` change them). Then continue; the user decides whether to proceed. If

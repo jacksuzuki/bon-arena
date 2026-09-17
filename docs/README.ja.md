@@ -17,6 +17,8 @@ Claude Code (/arena)
 
 Arena Core はハーネスに依存しない小さな CLI です。Claude Code の `/arena` skill が最初のホストで、他のホスト（Codex、単体利用、他のハーネス）からも同じ CLI を操作できます。
 
+> **セキュリティ:** 組み込み runner はフル権限で動きます（承認プロンプトなし、サンドボックスなし）。信頼できるコードで使うか、コンテナや VM の中で動かしてください。[セキュリティ](#セキュリティ)を参照。
+
 ## 動作要件
 
 - Node.js >= 22.18（または Bun。Node 互換 API のみ使用）
@@ -226,14 +228,28 @@ runner の隔離はそのまま機能し、`orca` CLI が無い・失敗した�
 | Runner | 起動コマンド |
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'`（プロンプトは stdin） |
-| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c sandbox_workspace_write.network_access=true -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Codex  | `codex exec -C <worktree> --dangerously-bypass-approvals-and-sandbox -o <results>/codex.last-message.md -` |
 | Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
-ヘッドレス実行では権限の確認に答えられないため、Claude は権限チェックをスキップして動きます。隔離は権限システムではなく専用の worktree によるものです。Codex は `workspace-write` サンドボックス（書き込みは worktree 内に限定）のまま、ネットワークアクセスだけを有効にして動きます。無効のままだと localhost での `listen()` すら拒否され、他の runner のように dev サーバーを立てて自分の実装を確認できないためです。閉じたい場合は `codex` に `extraArgs: ["-c", "sandbox_workspace_write.network_access=false"]` を設定します。各 runner は detached な supervisor プロセスに監視され、exit code が記録されるので、`arena` コマンドは終了してあとから戻れます（`arena wait`、`arena status`）。`arena stop` はプロセスグループ全体を終了します。
+ヘッドレス実行では権限の確認に答えられないため、組み込み runner はすべて権限チェックをスキップし、サンドボックスなしで動きます（[セキュリティ](#セキュリティ)を参照）。各 runner は detached な supervisor プロセスに監視され、exit code が記録されるので、`arena` コマンドは終了してあとから戻れます（`arena wait`、`arena status`）。`arena stop` はプロセスグループ全体を終了します。
 
 `agy` はプロセスのカレントディレクトリでは作業せず、stdin からプロンプトを読むこともできません。そのため worktree を `--add-dir` で、プロンプトを `-p=<prompt>` の 1 引数で渡します。print モードは既定で 5 分で打ち切られるので `--print-timeout` を明示し、会話 ID が出力に含まれる `stream-json` で起動します（runner のログはプレーンテキストではなく NDJSON になります）。
 
 runner の環境からは `CLAUDECODE` / `CLAUDE_CODE_*` を取り除くので、Claude Code 内から起動した Claude runner が「入れ子」と誤認することはありません。Claude Code の auto-memory はリポジトリ単位なので、worktree 内の runner はそのままではホストプロジェクトのメモリを読み書きしてしまいます。そのため Claude runner は `--settings '{"autoMemoryEnabled":false}'` を渡し、`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` を設定します。
+
+### セキュリティ
+
+**組み込み runner はフル権限で動きます。承認プロンプトもサンドボックスもありません。** runner はあなたのユーザーアカウントでできることを何でもできます。worktree の外のファイル、認証情報、ネットワークも含みます。専用の worktree は候補どうしの変更を分けるためのもので、セキュリティ境界ではありません。プロンプトの規則（「worktree の中だけで作業する」「push しない」）は指示であって、強制ではありません。
+
+これは意図した設計です。ヘッドレス実行は権限の確認に答えられないので、フル権限の代わりは「エージェントが外に出たいと頼めないサンドボックス」になります。その状態のエージェントは、dev サーバー、ブラウザ、パッケージストアで詰まると、自分の実装を確認せずに諦めます。また、全プレイヤーは同じ条件で競う必要があります。制限のない runner の隣で 1 体だけサンドボックスに入れても何も守れず、その 1 体が不利になるだけです。
+
+`arena run` は、エージェントを自分で「yolo」モードで 3 体同時に動かすのと同じものとして扱ってください。
+
+- 信頼できるリポジトリ、依存、タスクで使ってください。エージェントが読む内容（コード、issue、Web ページ）にはプロンプトインジェクションが含まれ得ます。
+- 信頼できないものを扱うときは、Arena をコンテナか VM の中で動かしてください。
+- `arena doctor` と、`arena start` / `arena run` の開始時に注意が表示されます。
+
+それでも runner を制限したい場合は、自分のフラグで[カスタム runner](#設定) を定義します（例: 別の id で `codex exec --sandbox workspace-write …`）。ただし比較は同条件ではなくなります。`arena ask` と `arena review` は別で、終了した会話を読み取り専用で再開します（下記）。
 
 ### 終了した runner に質問する（`arena ask`）
 

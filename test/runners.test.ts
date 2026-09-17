@@ -49,8 +49,8 @@ test("built-in runners are headless and honour config", () => {
   const codex = createCodexRunner({ command: "/opt/codex" }).invocation(input)
   assert.equal(codex.command, "/opt/codex")
   assert.equal(codex.args[0], "exec")
-  assert.ok(codex.args.includes("workspace-write"))
-  assert.ok(codex.args.includes("sandbox_workspace_write.network_access=true"), "lets Codex start a local dev server")
+  assert.ok(codex.args.includes("--dangerously-bypass-approvals-and-sandbox"), "same full permissions as the other built-ins")
+  assert.ok(!codex.args.includes("--sandbox"))
   assert.equal(codex.args.at(-1), "-")
 })
 
@@ -163,6 +163,8 @@ test("doctor lists agy and only requires claude and codex for its exit status", 
     JSON.parse(listed.stdout).runners.find((r: { id: string }) => r.id === "agy"),
     { id: "agy", label: "Antigravity", command: absent.command, available: false },
   )
+  assert.equal(JSON.parse(listed.stdout).permissions, "full")
+  assert.match(doctor({ claude: present, codex: present, agy: absent }).stdout, /FULL permissions/)
   // A missing agy never fails doctor; a missing claude or codex still does.
   assert.equal(doctor({ claude: present, codex: present, agy: absent }).status, 0)
   assert.equal(doctor({ claude: present, codex: present, agy: present }).status, 0)
