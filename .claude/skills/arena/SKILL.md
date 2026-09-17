@@ -1,6 +1,6 @@
 ---
 name: arena
-description: Run an implementation arena - two coding agents (Claude Code, Codex CLI, Antigravity CLI, or custom runners) implement the same task in separate git worktrees, then compare diffs, tests, lint and typecheck results and let the user pick. By default the request is first refined with the user into a one-shot specification ("simple" skips that). Use when the user types /arena, wants to "compare Claude vs Codex", "race agents", or "try two implementations".
+description: Run an implementation arena - two or three coding agents (Claude Code, Codex CLI, Antigravity CLI, or custom runners) implement the same task in separate git worktrees, then compare diffs, tests, lint and typecheck results and let the user pick. By default the request is first refined with the user into a one-shot specification ("simple" skips that). Use when the user types /arena, wants to "compare Claude vs Codex", "race agents", or "try two implementations".
 argument-hint: "[task <text> | task --simple <text> | task-simple <text> | status | list | resume <id> | compare <id> | clean <id>]"
 ---
 
@@ -80,17 +80,22 @@ your own system prompt and continue.
 
 ### 2. Players
 
-Ask with AskUserQuestion, two questions in one call, options taken from available runners
+Ask with AskUserQuestion, all questions in one call, options taken from available runners
 (built-ins: Claude, Codex, Antigravity (`agy`); plus any custom runners from `.arena.yaml`):
 
 - "Player 1?" default Claude
 - "Player 2?" default Codex
+- "Player 3?" default **None** (first option; two players), then the available runners. An arena
+  has two or three players; never offer a fourth.
 - "Task mode?" — only when `$ARGUMENTS` did not fix the mode: **Refine first (Recommended)** (you
   read the code, ask what is unclear, and write a one-shot specification before launching) /
   **Simple** (pass the request to the runners verbatim). Skip this question when the mode came
   from the arguments or the user has stated it.
 
-If a chosen runner is unavailable, say which command is missing and ask again.
+The same runner may be chosen more than once; its players are then named `<runner>`,
+`<runner>-2`, `<runner>-3` (use those ids wherever a command takes `<player>`). When the user
+already named the players ("claude, codex and agy"), skip the questions they answered. If a chosen
+runner is unavailable, say which command is missing and ask again.
 
 ### 3. Task
 
@@ -103,7 +108,7 @@ and is recorded as such. Then:
 
 ### 4. Refine (skipped in simple mode)
 
-Goal: turn the request into a specification that two independent, headless runners could implement
+Goal: turn the request into a specification that independent, headless runners could implement
 in one pass without guessing **what is wanted**. You clarify; you do **not** implement anything
 here, and you do not create worktrees, run setup or launch runners until the user confirms in
 step 4.7.
@@ -172,7 +177,7 @@ verification commands), then start.
 Refined mode, using the draft path printed by `arena refine`:
 
 ```bash
-arena start --players <p1>,<p2> --original-task-file <draft path> --json <<'ARENA_TASK'
+arena start --players <p1>,<p2>[,<p3>] --original-task-file <draft path> --json <<'ARENA_TASK'
 <refined specification>
 ARENA_TASK
 ```
@@ -180,7 +185,7 @@ ARENA_TASK
 Simple mode:
 
 ```bash
-arena start --players <p1>,<p2> --json <<'ARENA_TASK'
+arena start --players <p1>,<p2>[,<p3>] --json <<'ARENA_TASK'
 <original request verbatim>
 ARENA_TASK
 ```
@@ -201,7 +206,7 @@ Runners take minutes. Run the wait in the background so the Bash timeout does no
 arena wait <id> --interval 30
 ```
 
-(use `run_in_background: true`). Tell the user both players are working and that they can ask for
+(use `run_in_background: true`). Tell the user the players are working and that they can ask for
 status any time (`arena status <id>`). Do not poll in a loop yourself; the background task notifies
 you when it finishes. If the user asks to abort, run `arena stop <id>`.
 
@@ -217,7 +222,7 @@ show the last lines of `arena logs <id> <player> --stderr --tail 40`.
 Do this before asking the user anything: they cannot decide between synthesizing and adopting a
 candidate as is without seeing the review.
 
-Run `arena compare <id>` and review the bundle it prints. Judge both candidates on: correctness,
+Run `arena compare <id>` and review the bundle it prints. Judge every candidate on: correctness,
 task completeness, regression risk, architecture fit, code complexity, adherence to existing
 conventions, test quality, unnecessary changes. In refined mode the bundle contains both the
 specification and the original request: judge completeness against the specification, and check
@@ -246,7 +251,7 @@ Present a concise comparison to the user:
 
 1. a short table of facts (duration, files, diff size, verification results, approach in one line);
 2. per criterion, which candidate is stronger and why, including any defect you found;
-3. the recommended base, **the concrete strengths of the other candidate worth folding in**
+3. the recommended base, **the concrete strengths of each other candidate worth folding in**
    (specific files, functions, tests, docs), and whether a plain adoption would already be good
    enough or synthesis adds real value.
 
@@ -260,17 +265,18 @@ shows a candidate's changed files as diffs in the app, and run it when the user 
 
 Only now ask with AskUserQuestion, in this order (the first option is the default):
 
-- **Synthesize (Recommended)** — base on <recommended>, fold in <other>'s strengths listed above,
-  and finish the implementation yourself
+- **Synthesize (Recommended)** — base on <recommended>, fold in the strengths of the other
+  candidate(s) listed above, and finish the implementation yourself
 - Adopt <recommended> as is
-- Adopt <other> as is
-- Inspect a diff (then return to this question)
+- Adopt <other> as is (one option per other candidate)
+- Inspect a diff (then return to this question) — with three candidates the four options are
+  taken; say in the question text that "inspect a diff" can be typed instead
 
 If the user wants to interrogate a candidate first ("ask Codex why…"), run `arena ask` with their
 question, relay the answer, and ask this question again.
 
-Mention that "Keep both" and "Clean arena" are also available if the user asks. If the comparison
-showed that one candidate is clearly complete and the other adds nothing worth porting, say so and
+Mention that "Keep all" and "Clean arena" are also available if the user asks. If the comparison
+showed that one candidate is clearly complete and the others add nothing worth porting, say so and
 still list Synthesize first, but note that adopting as is would be a fine choice.
 
 **Adopt as is**: `arena select <id> <player>`, relay its output, then go to step 11 (Review).
@@ -278,7 +284,7 @@ still list Synthesize first, but note that adopting as is would be a fine choice
 **Inspect a diff**: ask which player, run `arena diff <id> <player>` and walk the user through it,
 then ask this question again.
 
-**Keep both**: print both branch names and worktree paths and stop.
+**Keep all**: print every branch name and worktree path and stop.
 
 **Clean arena**: confirm ("removes worktrees and unselected branches"), then `arena clean <id>`.
 
@@ -286,12 +292,12 @@ then ask this question again.
 
 1. The base is the recommended candidate from step 8 unless the user named another one when
    choosing Synthesize; if their answer suggests a different base, confirm with AskUserQuestion:
-   "Base candidate?" — recommended first, the other second, "Stop here" third.
+   "Base candidate?" — recommended first, the others next, "Stop here" last.
 2. Run `arena synthesize <id> <base>`. It snapshots the base candidate onto its branch, selects it,
-   and prints a brief with the other candidate's diff. Relay the worktree path and the list of
+   and prints a brief with the diff of every other candidate. Relay the worktree path and the list of
    strengths you are about to fold in.
 3. Work **inside the base candidate's worktree** (the path from the brief; use absolute paths, do
-   not touch the user's main checkout). Keep the base's structure. Port the other candidate's
+   not touch the user's main checkout). Keep the base's structure. Port the other candidates'
    strengths deliberately: take ideas, tests, docs and edge-case handling, not wholesale files.
    Fix defects you found in the comparison. Then polish: remove leftovers, unify naming, update
    README/docs so they describe the combined result.
@@ -300,7 +306,7 @@ then ask this question again.
 5. Commit with `arena commit <id> <base> -m "arena(<id>): synthesis — <one line>"` and run
    `arena finish <id>`.
 6. Summarize what the final version contains: what came from the base, what was folded in from
-   the other candidate, what you changed yourself. Then go to step 11.
+   each other candidate, what you changed yourself. Then go to step 11.
 
 ### 11. Review (always, before integrating)
 
@@ -329,7 +335,7 @@ Then triage:
    Synthesize: absolute paths, never the user's checkout). Re-verify with
    `arena collect <id> --player <selected>` and commit with `arena commit <id> <selected> -m
    "arena(<id>): review fixes — <one line>"`.
-3. If you changed code, run `arena review <id>` once more so both runners see the fixed version.
+3. If you changed code, run `arena review <id>` once more so every runner sees the fixed version.
    Stop after two rounds regardless; remaining disagreements go to the user.
 4. Present a short review summary: each runner's verdict per round, which findings you accepted
    (and fixed) and which you rejected with the reason. A `request-changes` you decided not to act

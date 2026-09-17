@@ -2,7 +2,7 @@
 
 **English** | [日本語](docs/README.ja.md) | [简体中文](docs/README.zh-CN.md)
 
-Run two coding agents on the **same task** in **separate git worktrees**, then compare what they
+Run two or three coding agents on the **same task** in **separate git worktrees**, then compare what they
 produced: diff stats, tests, lint, typecheck — and pick the one you want.
 
 ```
@@ -100,7 +100,7 @@ In any git repository:
 /arena Replace the hand-rolled session code with Better Auth
 ```
 
-Claude Code asks for Player 1 / Player 2, then **refines the task** before anything is launched:
+Claude Code asks for Player 1 / Player 2 and an optional Player 3, then **refines the task** before anything is launched:
 it works out what the runners would otherwise have to guess about *what you want* (scope, edge
 cases, user-facing names, compatibility), asks you only about the points it cannot settle itself,
 and writes a specification (goal, context, scope, requirements, acceptance criteria as observable
@@ -108,7 +108,7 @@ behavior, constraints, verification, decisions, and what is left open to the imp
 deliberately stops there: investigating the code in depth and designing the solution is what the
 runners compete on, and anything the host works out for them would be shared by every candidate,
 mistakes included. Findings it has anyway go into a short "Notes (unverified)" section that runners
-are told to check rather than obey. You approve or edit it, and only then are both players
+are told to check rather than obey. You approve or edit it, and only then are the players
 launched in isolated worktrees with that specification. The runners are headless and cannot ask
 questions, so this is the step that keeps them from guessing differently. Your original request is
 stored with the session and shown next to the specification in `arena compare`.
@@ -132,7 +132,7 @@ presents a comparison first**: facts, per-criterion judgement, the recommended b
 other candidate does better. Only then does it ask what to do. The recommended option is
 **Synthesize**: take the stronger candidate as the base, fold in the other's strengths inside that
 candidate's worktree, re-run verification, and commit the result on the candidate branch. You can
-also adopt either candidate as is. Before asking you to merge, Claude Code has **both runners
+also adopt any candidate as is. Before asking you to merge, Claude Code has **every runner
 review the final version** (`arena review`): each resumes its own conversation read-only, sees the
 final diff, and answers with a verdict and findings; Claude Code verifies the findings, fixes the
 ones it accepts, and shows you what it rejected and why. Merging into your branch (`arena adopt`)
@@ -143,6 +143,7 @@ happens only when you say so, and nothing is ever pushed.
 ```bash
 arena run --players claude,codex --task "Add rate limiting to the API"   # simple mode: text goes to the runners verbatim
 arena run --players claude,agy --task "Add rate limiting to the API"     # any built-in: claude, codex, agy (Antigravity)
+arena run --players claude,codex,agy --task "Add rate limiting to the API"   # three players; a runner may repeat (claude,claude → claude, claude-2)
 # or step by step
 arena start --players claude,codex --task-file task.md
 arena wait latest
@@ -275,7 +276,7 @@ so there is no Superset integration yet.
 
 ## How runners are launched
 
-Both players receive the same prompt: shared arena rules (work only in the current worktree, finish
+All players receive the same prompt: shared arena rules (work only in the current worktree, finish
 the task completely, run tests, do not push) followed by the task verbatim. In refined mode the
 task is the specification agreed with the user, and the rules add that it is authoritative: the
 original request is not part of the prompt, so the runners cannot re-interpret it.
@@ -407,7 +408,7 @@ installed with `npm install -g ./bon-arena-<version>.tgz`.
 
 ## Not in v0.1
 
-Automatic winner selection, cross-review, 3+ players, tournaments, cloud execution, web UI,
+Automatic winner selection, cross-review, 4+ players in `/arena`, tournaments, cloud execution, web UI,
 Superset adapter, delegating runner execution to Orca, MCP, PR creation, automatic merge, cost tracking.
 
 ## License

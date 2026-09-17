@@ -121,7 +121,15 @@ Player 1?
 Player 2?
   Claude
 ❯ Codex
+
+Player 3?
+❯ None
+  Claude
+  Codex
+  Antigravity
 ```
+
+Player 3 は任意（既定は None）。`/arena` は 2〜3 体まで。
 
 同じ runner 同士の対戦も将来的には許可するが、MVP では Claude vs Codex を主対象とする。
 

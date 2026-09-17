@@ -2,7 +2,7 @@
 
 [English](../README.md) | [日本語](README.ja.md) | **简体中文**
 
-让两个编码智能体在**各自独立的 git worktree** 中实现**同一个任务**，然后比较它们的产出（diff 统计、测试、lint、typecheck），并由你选择要采用的那个。
+让两到三个编码智能体在**各自独立的 git worktree** 中实现**同一个任务**，然后比较它们的产出（diff 统计、测试、lint、typecheck），并由你选择要采用的那个。
 
 ```
 Claude Code (/arena)
@@ -82,7 +82,7 @@ host
 /arena 用 Better Auth 替换手写的会话代码
 ```
 
-Claude Code 会询问 Player 1 / Player 2，然后在启动任何东西之前**提炼任务**：找出 runner 对**你想要什么**只能靠猜的地方（范围、边界情况、面向用户的名称、兼容性），只就它自己无法决定的问题向你提问，并写出规格（目标、背景、范围、需求、以可观察行为表述的验收标准、约束、验证、决定事项，以及留给实现者的部分）。宿主有意止步于此：深入调查代码和设计方案正是 runner 相互竞争的部分，宿主替它们做的任何事都会连同错误一起被所有候选共享。宿主顺带得到的实现层面发现写入简短的 “Notes (unverified)”，并告知 runner 应核实而非照办。你批准或编辑之后，两个玩家才会带着该规格在隔离的 worktree 中启动。runner 是无交互的，无法提问，所以正是这一步防止了它们各自做出不同的猜测。你的原始需求会与会话一起保存，并在 `arena compare` 中与规格并列显示。
+Claude Code 会询问 Player 1 / Player 2 以及可选的 Player 3，然后在启动任何东西之前**提炼任务**：找出 runner 对**你想要什么**只能靠猜的地方（范围、边界情况、面向用户的名称、兼容性），只就它自己无法决定的问题向你提问，并写出规格（目标、背景、范围、需求、以可观察行为表述的验收标准、约束、验证、决定事项，以及留给实现者的部分）。宿主有意止步于此：深入调查代码和设计方案正是 runner 相互竞争的部分，宿主替它们做的任何事都会连同错误一起被所有候选共享。宿主顺带得到的实现层面发现写入简短的 “Notes (unverified)”，并告知 runner 应核实而非照办。你批准或编辑之后，两个玩家才会带着该规格在隔离的 worktree 中启动。runner 是无交互的，无法提问，所以正是这一步防止了它们各自做出不同的猜测。你的原始需求会与会话一起保存，并在 `arena compare` 中与规格并列显示。
 
 要跳过提炼，可在命令行上预先选择 **simple 模式**，此时你的文本会原样传给 runner：
 
@@ -93,13 +93,14 @@ Claude Code 会询问 Player 1 / Player 2，然后在启动任何东西之前**�
 
 `/arena task <text>`（或纯文本）默认会提炼；不带参数的 `/arena` 会与玩家一起询问模式。`.arena.yaml` 中的 `refine: false` 可把仓库默认改为 simple 模式，`task --refine` 强制提炼，`/arena -- <text>` 可发送恰好以关键字开头的文本。提炼期间不会启动任何东西；在任何 worktree 存在之前，你都可以编辑规格或取消。确认步骤不会再次提供模式选择。
 
-runner 完成后，Claude Code 会等待、运行验证、显示摘要，并**始终先给出比较**：事实、逐项判断、推荐的基底以及另一候选做得更好的地方。之后才询问下一步。推荐选项是 **Synthesize**：以更强的候选为基底，在该候选的 worktree 中融入另一方的优点，重新运行验证，并把结果提交到候选分支。你也可以原样采用任一候选。在询问是否合并之前，Claude Code 会让**两个 runner 都审阅最终版本**（`arena review`）：每个 runner 以只读方式恢复自己的会话，查看最终 diff，并给出结论和发现；Claude Code 会核实这些发现，修复它认可的，并把拒绝的连同理由一起展示给你。合并到你的分支（`arena adopt`）只在你明确要求时进行，并且永远不会 push。
+runner 完成后，Claude Code 会等待、运行验证、显示摘要，并**始终先给出比较**：事实、逐项判断、推荐的基底以及另一候选做得更好的地方。之后才询问下一步。推荐选项是 **Synthesize**：以更强的候选为基底，在该候选的 worktree 中融入另一方的优点，重新运行验证，并把结果提交到候选分支。你也可以原样采用任一候选。在询问是否合并之前，Claude Code 会让**所有 runner 都审阅最终版本**（`arena review`）：每个 runner 以只读方式恢复自己的会话，查看最终 diff，并给出结论和发现；Claude Code 会核实这些发现，修复它认可的，并把拒绝的连同理由一起展示给你。合并到你的分支（`arena adopt`）只在你明确要求时进行，并且永远不会 push。
 
 ## 在终端中使用
 
 ```bash
 arena run --players claude,codex --task "为 API 添加限流"   # simple 模式：文本原样传给 runner
 arena run --players claude,agy --task "为 API 添加限流"     # 内置 runner 任选：claude、codex、agy（Antigravity）
+arena run --players claude,codex,agy --task "为 API 添加限流"   # 三个玩家；同一 runner 可重复（claude,claude → claude、claude-2）
 # 或分步执行
 arena start --players claude,codex --task-file task.md
 arena wait latest
@@ -214,7 +215,7 @@ arena logs latest claude --follow   # 在任意终端查看同样的实时输出
 
 ## runner 的启动方式
 
-两个玩家收到相同的提示词：共享的 arena 规则（只在当前 worktree 内工作、完整完成任务、运行测试、不要 push），然后是原样的任务。在 refined 模式下，任务就是与用户商定的规格，规则中会补充说明它是权威的：原始需求不在提示词中，因此 runner 无法重新解释它。
+所有玩家收到相同的提示词：共享的 arena 规则（只在当前 worktree 内工作、完整完成任务、运行测试、不要 push），然后是原样的任务。在 refined 模式下，任务就是与用户商定的规格，规则中会补充说明它是权威的：原始需求不在提示词中，因此 runner 无法重新解释它。
 
 | Runner | 调用方式 |
 |---|---|
@@ -297,7 +298,7 @@ npm pack                     # 生成 bon-arena-<version>.tgz
 
 ## v0.1 不包含
 
-自动判定胜者、交叉评审、3 个以上玩家、锦标赛、云端执行、Web UI、Superset 适配器、将 runner 执行委托给 Orca、MCP、创建 PR、自动合并、成本统计。
+自动判定胜者、交叉评审、`/arena` 中 4 个以上玩家、锦标赛、云端执行、Web UI、Superset 适配器、将 runner 执行委托给 Orca、MCP、创建 PR、自动合并、成本统计。
 
 ## 许可证
 

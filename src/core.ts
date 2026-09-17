@@ -131,7 +131,7 @@ export async function startArena(opts: StartOptions): Promise<Session> {
     session.players.push({
       id: playerId,
       runner: runner.id,
-      label: runners.length > 1 && playerIds.filter((p) => p.startsWith(runner.id)).length > 1 ? `${runner.label} #${i + 1}` : runner.label,
+      label: runners.filter((r) => r.id === runner.id).length > 1 ? `${runner.label} #${runners.slice(0, i + 1).filter((r) => r.id === runner.id).length}` : runner.label,
       branch,
       worktree,
       status: "pending",

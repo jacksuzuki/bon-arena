@@ -117,7 +117,7 @@ test("reviewFinal has every runner review the synthesized final version in paral
   )
   // Both reviewers were told where the final version is and how it relates to their own candidate.
   assert.match(r.answers.alpha!, new RegExp(`final=${base.worktree.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\norigin=based on YOUR candidate\\ndiff=true`))
-  assert.match(r.answers.beta!, new RegExp(`final=${base.worktree.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\norigin=based on the OTHER candidate\\ndiff=true`))
+  assert.match(r.answers.beta!, new RegExp(`final=${base.worktree.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\norigin=based on ANOTHER candidate \\(alpha\\)\\ndiff=true`))
   const betaPrompt = readFileSync(r.round.entries[1]!.promptPath!, "utf8")
   assert.match(betaPrompt, /Additional instructions from the host:\nFocus on impl\.txt\./)
   assert.match(betaPrompt, /read-only exchange/)
@@ -142,6 +142,24 @@ test("reviewFinal has every runner review the synthesized final version in paral
   assert.deepEqual(again.round.entries.map((e) => e.player), ["beta"])
   assert.notEqual(again.round.targetCommit, r.round.targetCommit)
   assert.equal(loadSession(session.id).reviews.length, 2)
+})
+
+test("an arena runs three players, the same runner twice included, through synthesis and review", async (t) => {
+  const { repo, cleanup } = fixture(t, TWO_RUNNERS)
+  const session = await startArena({ repo, task: "write impl", players: ["alpha", "beta", "alpha"] })
+  cleanup(() => cleanArena(session.id, { force: true }))
+  assert.deepEqual(session.players.map((p) => p.id), ["alpha", "beta", "alpha-2"])
+  assert.deepEqual(session.players.map((p) => p.label), ["alpha #1", "beta", "alpha #2"])
+  assert.equal(new Set(session.players.map((p) => p.worktree)).size, 3)
+  const done = await waitForArena(session.id, { intervalMs: 100, timeoutMs: 30_000 })
+  assert.deepEqual(done.players.map((p) => p.status), ["completed", "completed", "completed"])
+  assert.equal(readFileSync(join(session.players[2]!.worktree, "impl.txt"), "utf8"), "implemented by alpha-2\n")
+
+  const { others } = startSynthesis(session.id, "beta")
+  assert.deepEqual(others.map((p) => p.id), ["alpha", "alpha-2"])
+  const r = await reviewFinal(session.id)
+  assert.deepEqual(r.round.entries.map((e) => [e.player, e.verdict]), [["alpha", "approve"], ["beta", "request-changes"], ["alpha-2", "approve"]])
+  assert.match(r.answers["alpha-2"]!, /origin=based on ANOTHER candidate \(beta\)/)
 })
 
 test("reviewFinal records runners that cannot be asked or time out instead of failing the round", async (t) => {

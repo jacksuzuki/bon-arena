@@ -6,7 +6,7 @@ export interface ArenaPromptOptions {
   refined?: boolean
 }
 
-/** Shared rules prepended to every runner prompt so both players compete under the same conditions. */
+/** Shared rules prepended to every runner prompt so all players compete under the same conditions. */
 export function buildArenaPrompt(task: string, opts: ArenaPromptOptions = {}): string {
   const taskNote = opts.refined
     ? `The task below is a specification that was refined together with the user before this run.
@@ -87,11 +87,11 @@ export interface ReviewPromptInput {
 export function buildReviewPrompt(input: ReviewPromptInput): string {
   const origin = input.reviewerIsTarget
     ? input.synthesized
-      ? "It is based on YOUR candidate: the host edited your worktree after your run, folding in the other candidate's strengths and its own changes. Your worktree now holds the final version, not your original candidate."
+      ? "It is based on YOUR candidate: the host edited your worktree after your run, folding in the other candidates' strengths and its own changes. Your worktree now holds the final version, not your original candidate."
       : "It is YOUR candidate, adopted as is."
     : input.synthesized
-      ? `It is based on the OTHER candidate: the host took that candidate as the base and folded in strengths from your candidate and its own changes. Your own worktree (${input.reviewerWorktree}) still holds your candidate and is NOT the final version.`
-      : `It is the OTHER candidate, adopted as is. Your own worktree (${input.reviewerWorktree}) still holds your candidate and is NOT the final version.`
+      ? `It is based on ANOTHER candidate (${input.finalLabel}): the host took that candidate as the base and folded in strengths from the other candidates (yours included) and its own changes. Your own worktree (${input.reviewerWorktree}) still holds your candidate and is NOT the final version.`
+      : `It is ANOTHER candidate (${input.finalLabel}), adopted as is. Your own worktree (${input.reviewerWorktree}) still holds your candidate and is NOT the final version.`
   const diffSection = input.diff.trim()
     ? [
         `Diff from the base commit ${input.baseCommit} to the final version${input.diffTruncated ? ` (truncated; full diff: ${input.diffPath})` : ""}:`,

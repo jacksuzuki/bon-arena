@@ -99,7 +99,7 @@ export function buildRefineContext(opts: RefineOptions): RefineContext {
 }
 
 /**
- * Skeleton the host fills in. It fixes what the user wants, so two runners read the same contract,
+ * Skeleton the host fills in. It fixes what the user wants, so every runner reads the same contract,
  * and deliberately has no place for a design: how to build it is what the runners compete on.
  */
 export const REFINED_TASK_TEMPLATE = `# <title: one line, imperative>
@@ -159,7 +159,7 @@ export function renderRefineBrief(ctx: RefineContext): string {
   out.push("")
   out.push("## Why", "")
   out.push(
-    "Runners work headless and cannot ask anything. Every gap in what the user wants becomes a guess, and two runners guess differently, which makes the candidates hard to compare. Close those gaps now: runners receive only the specification you write; the original request is stored with the session for reviewers. But stop there. An arena is a best-of-N: its value is that independent runners investigate and design differently, and anything you investigate or design for them is shared by every candidate — including your mistakes. Settle what is wanted; leave how to build it to the runners. Until the user confirms the specification, do not create worktrees, run setup, launch runners, or implement anything.",
+    "Runners work headless and cannot ask anything. Every gap in what the user wants becomes a guess, and each runner guesses differently, which makes the candidates hard to compare. Close those gaps now: runners receive only the specification you write; the original request is stored with the session for reviewers. But stop there. An arena is a best-of-N: its value is that independent runners investigate and design differently, and anything you investigate or design for them is shared by every candidate — including your mistakes. Settle what is wanted; leave how to build it to the runners. Until the user confirms the specification, do not create worktrees, run setup, launch runners, or implement anything.",
     "",
   )
   out.push("## Procedure", "")
@@ -172,12 +172,12 @@ export function renderRefineBrief(ctx: RefineContext): string {
   out.push("7. Launch — the original request is recorded alongside the specification:")
   out.push("")
   out.push("```bash")
-  out.push(`arena start --players <p1>,<p2> --original-task-file ${ctx.draftPath ?? "<original.md>"} --json <<'ARENA_TASK'`)
+  out.push(`arena start --players <p1>,<p2>[,<p3>] --original-task-file ${ctx.draftPath ?? "<original.md>"} --json <<'ARENA_TASK'`)
   out.push("<refined specification>")
   out.push("ARENA_TASK")
   out.push("```")
   out.push("")
-  out.push("Simple mode instead (request passed verbatim, no original recorded): `arena start --players <p1>,<p2> --task-file " + (ctx.draftPath ?? "<original.md>") + "`", "")
+  out.push("Simple mode instead (request passed verbatim, no original recorded): `arena start --players <p1>,<p2>[,<p3>] --task-file " + (ctx.draftPath ?? "<original.md>") + "`", "")
   out.push("## Specification template", "", "```markdown", REFINED_TASK_TEMPLATE.trimEnd(), "```", "")
   return out.join("\n")
 }
