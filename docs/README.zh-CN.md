@@ -121,6 +121,8 @@ arena review latest                    # 每个 runner 审阅最终版本（只�
 arena review latest --instructions "重点看重试路径"   # 可选的提示；--players codex 可限定审阅者
 ```
 
+省略 `--players` 时默认仍为 `claude,codex`。`arena doctor` 会列出全部三个内置 runner；缺少 `agy` 不影响其退出码（缺少 `claude` 或 `codex` 时仍为 1）。
+
 在终端中提炼（CLI 从不调用模型；思考由宿主或人来完成）：
 
 ```bash

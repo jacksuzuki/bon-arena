@@ -19,6 +19,8 @@ import { describeHost, detectHost } from "./host.js";
 import { createIntegrations, integrationStatuses, syncIntegrations } from "./integrations/index.js";
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
 
+Built-in runners: Claude (claude), Codex (codex), Antigravity (agy). Default players: claude,codex.
+
 Usage:
   arena install-skill [--force] [--config-dir <path>]
                                                     Install the Claude Code /arena skill (no repository required)

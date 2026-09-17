@@ -1,5 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { execFileSync, spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import { createCustomRunner } from "../src/runners/custom.ts"
 import { createAgyRunner, findAgyConversation } from "../src/runners/agy.ts"
 import { createClaudeRunner } from "../src/runners/claude.ts"
@@ -137,6 +139,34 @@ test("custom runner supports questions only when askArgs is configured", () => {
   const inv = withAsk.askInvocation!(askInput)
   assert.deepEqual(inv.args, ["ask", "--session", askInput.sessionId, "--prompt-file", "/q.md"])
   assert.equal(inv.promptViaStdin, false)
+})
+
+test("doctor lists agy and only requires claude and codex for its exit status", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "arena-doctor-"))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  execFileSync("git", ["init", "-q", "-b", "main", dir])
+  execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "init"])
+  const present = { command: process.execPath }
+  const absent = { command: join(dir, "missing-runner") }
+  const doctor = (runners: Record<string, { command: string }>, json = false) => {
+    writeFileSync(join(dir, ".arena.yaml"), JSON.stringify({ runners, integrations: { orca: false } }))
+    return spawnSync(process.execPath, [fileURLToPath(new URL("../src/arena.ts", import.meta.url)), "doctor", "--repo", dir, ...(json ? ["--json"] : [])], {
+      encoding: "utf8",
+      env: { ...process.env, XDG_CONFIG_HOME: dir, CLAUDE_CONFIG_DIR: dir },
+    })
+  }
+
+  const listed = doctor({ claude: present, codex: present, agy: absent }, true)
+  assert.equal(listed.status, 0, listed.stderr)
+  assert.deepEqual(
+    JSON.parse(listed.stdout).runners.find((r: { id: string }) => r.id === "agy"),
+    { id: "agy", label: "Antigravity", command: absent.command, available: false },
+  )
+  // A missing agy never fails doctor; a missing claude or codex still does.
+  assert.equal(doctor({ claude: present, codex: present, agy: absent }).status, 0)
+  assert.equal(doctor({ claude: present, codex: present, agy: present }).status, 0)
+  assert.equal(doctor({ claude: absent, codex: present, agy: present }).status, 1)
+  assert.equal(doctor({ claude: present, codex: absent, agy: present }).status, 1)
 })
 
 test("agy runner works inside the worktree headlessly and passes the prompt as one -p= argument", () => {

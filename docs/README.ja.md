@@ -121,6 +121,8 @@ arena review latest                    # 全 runner が最終版をレビュー 
 arena review latest --instructions "リトライ経路を重点的に"   # 任意の指示。--players codex でレビュアーを限定
 ```
 
+`--players` を省略した場合の既定は引き続き `claude,codex` です。`arena doctor` は組み込み 3 つをすべて表示しますが、`agy` が無くても終了コードは変わりません（`claude` / `codex` が無い場合は従来どおり 1）。
+
 ターミナルからの洗練（CLI はモデルを呼びません。考えるのはホストか人間です）:
 
 ```bash

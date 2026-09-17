@@ -163,6 +163,9 @@ arena review latest                    # every runner reviews the final version 
 arena review latest --instructions "Focus on the retry path"   # optional steer; --players codex limits reviewers
 ```
 
+Omitting `--players` still means `claude,codex`. `arena doctor` lists all three built-ins; a missing
+`agy` does not change its exit status (a missing `claude` or `codex` still does).
+
 Refinement from a terminal (the CLI never calls a model; a host or a human does the thinking):
 
 ```bash
