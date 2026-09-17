@@ -477,7 +477,7 @@ Claude と同じ共通ルールを渡す。
 
 ### 権限: 組み込み runner はすべてフル権限
 
-組み込み runner は承認プロンプトもサンドボックスもなしで起動する（Claude / Antigravity は
+組み込み runner は、承認を求めるものも閉じ込めるものもない状態で起動する（Claude / Antigravity は
 `--dangerously-skip-permissions`、Codex は `--dangerously-bypass-approvals-and-sandbox`）。
 
 - ヘッドレス実行は権限の確認に答えられない。フル権限の代わりは「外に出たいと頼めないサンドボックス」で、
@@ -486,6 +486,10 @@ Claude と同じ共通ルールを渡す。
 - 比較条件を揃える。制限のない runner の隣で 1 体だけサンドボックスに入れても何も守れず、不利になるだけ。
 - worktree はセキュリティ境界ではない。README の Security 節、`arena doctor`、`arena start` で明示する
   （`PERMISSIONS_NOTICE`）。信頼できない対象はコンテナ / VM の中で動かす。
+- `agy` だけは仕組みが違う。ターミナルサンドボックス（`settings.json` の `enableTerminalSandbox`、print モードでも有効）を
+  起動フラグで切れない。有効でも、ブロックされたコマンドのサンドボックス外での再実行が
+  `--dangerously-skip-permissions` で自動承認されるので、届く範囲はフル権限と同じ（agy 1.2.5 で実測）。
+  Arena はユーザーの `agy` 設定を書き換えない。
 - 人間が都度承認する対話型の実行は、このツールの範囲外とする（Orca 専用の別ツールで扱う方針）。
 - `arena ask` / `arena review` は別で、読み取り専用で再開する。
 

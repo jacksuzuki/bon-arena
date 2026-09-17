@@ -19,7 +19,7 @@ Claude Code (/arena)
 Arena Core is a small, harness-independent CLI. The Claude Code `/arena` skill is the first host;
 other hosts (Codex, standalone use, other harnesses) can drive the same CLI.
 
-> **Security:** the built-in runners run with full permissions — no approval prompts, no sandbox.
+> **Security:** the built-in runners run with full permissions — nothing asks for approval, nothing confines them.
 > Use Arena on code you trust, or inside a container or VM. See [Security](#security).
 
 ## Requirements
@@ -295,7 +295,7 @@ original request is not part of the prompt, so the runners cannot re-interpret i
 | Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
 Headless runs cannot answer permission prompts, so every built-in runner runs with permissions
-skipped and no sandbox — see [Security](#security). Each runner is supervised by a
+skipped and nothing confining it — see [Security](#security). Each runner is supervised by a
 detached process that records the exit code, so `arena` commands can exit and come back later
 (`arena wait`, `arena status`). `arena stop` kills the whole process group.
 
@@ -312,7 +312,7 @@ memory; the Claude runner therefore passes `--settings '{"autoMemoryEnabled":fal
 
 ### Security
 
-**Built-in runners run with full permissions: no approval prompts and no sandbox.** A runner can
+**Built-in runners run with full permissions: nothing asks for approval and nothing confines them.** A runner can
 read, change and run anything your user account can — files outside the worktree, your credentials,
 the network. The dedicated worktree keeps the candidates' changes apart; it is not a security
 boundary, and the rules in the prompt ("work only inside the worktree", "do not push") are
@@ -323,6 +323,13 @@ permissions is a sandbox the agent cannot ask to leave — and an agent in that 
 dev servers, browsers and package stores instead of checking its work. All players must also compete
 under the same conditions: sandboxing one runner next to an unrestricted one protects nothing and
 only handicaps it.
+
+Antigravity is a partial exception in mechanism, not in effect. `agy` has a terminal sandbox that no
+launch flag turns off: it follows `enableTerminalSandbox` in your `~/.gemini/antigravity-cli/settings.json`,
+also in headless runs. With it on, `agy` starts each command inside the sandbox, but it can rerun a
+blocked command outside it, and `--dangerously-skip-permissions` approves that request as well. So it
+reaches whatever the other runners reach, after a failed first attempt. Arena does not edit your
+`agy` settings.
 
 So treat `arena run` like running the agents yourself in "yolo" mode, three at a time:
 

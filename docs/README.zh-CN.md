@@ -17,7 +17,7 @@ Claude Code (/arena)
 
 Arena Core 是一个小巧、与宿主无关的 CLI。Claude Code 的 `/arena` skill 是第一个宿主；其他宿主（Codex、独立使用、其他 harness）也可以驱动同一个 CLI。
 
-> **安全：** 内置 runner 以完全权限运行（没有确认提示，没有沙箱）。请只用于你信任的代码，或在容器、虚拟机中运行。见[安全](#安全)。
+> **安全：** 内置 runner 以完全权限运行（没有确认提示，也没有任何东西能限制它们）。请只用于你信任的代码，或在容器、虚拟机中运行。见[安全](#安全)。
 
 ## 环境要求
 
@@ -228,7 +228,7 @@ arena logs latest claude --follow   # 在任意终端查看同样的实时输出
 | Codex  | `codex exec -C <worktree> --dangerously-bypass-approvals-and-sandbox -o <results>/codex.last-message.md -` |
 | Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
-无交互运行无法回答权限确认，因此所有内置 runner 都以跳过权限、无沙箱的方式运行（见[安全](#安全)）。每个 runner 由一个分离的 supervisor 进程监管并记录退出码，因此 `arena` 命令可以退出后再回来（`arena wait`、`arena status`）。`arena stop` 会终止整个进程组。
+无交互运行无法回答权限确认，因此所有内置 runner 都以跳过权限、不受任何限制的方式运行（见[安全](#安全)）。每个 runner 由一个分离的 supervisor 进程监管并记录退出码，因此 `arena` 命令可以退出后再回来（`arena wait`、`arena status`）。`arena stop` 会终止整个进程组。
 
 `agy` 不在进程的当前目录中工作，也无法从 stdin 读取提示词，因此 worktree 通过 `--add-dir` 传入，提示词作为单个 `-p=<prompt>` 参数传入。它的 print 模式默认 5 分钟后中止，所以显式指定 `--print-timeout`；输出使用 `stream-json`，因为会话 id 出现在其中（runner 的日志是 NDJSON，而不是纯文本）。
 
@@ -236,9 +236,11 @@ runner 的环境中会去掉 `CLAUDECODE` / `CLAUDE_CODE_*` 变量，这样从 C
 
 ### 安全
 
-**内置 runner 以完全权限运行：没有确认提示，也没有沙箱。** runner 可以读取、修改和执行你的用户账户能做的任何事，包括 worktree 之外的文件、你的凭据和网络。专用 worktree 只是把各候选的改动分开，并不是安全边界；提示词里的规则（“只在 worktree 内工作”“不要 push”）是指示，而不是强制。
+**内置 runner 以完全权限运行：没有确认提示，也没有任何东西能限制它们。** runner 可以读取、修改和执行你的用户账户能做的任何事，包括 worktree 之外的文件、你的凭据和网络。专用 worktree 只是把各候选的改动分开，并不是安全边界；提示词里的规则（“只在 worktree 内工作”“不要 push”）是指示，而不是强制。
 
 这是有意的设计。无交互运行无法回答权限确认，因此完全权限的替代方案是一个 agent 无法请求离开的沙箱，而处于这种状态的 agent 在 dev server、浏览器和包存储上受阻时，会直接放弃而不去检查自己的实现。此外，所有玩家必须在相同条件下竞争：在不受限制的 runner 旁边只把其中一个放进沙箱，什么也保护不了，只会让它处于劣势。
+
+Antigravity 只是机制上的例外，效果相同。`agy` 有一个终端沙箱，无法通过启动参数关闭：即使在无交互运行中，它也遵循 `~/.gemini/antigravity-cli/settings.json` 里的 `enableTerminalSandbox`。开启时，`agy` 先在沙箱内执行每条命令，但可以在沙箱外重新执行被拦截的命令，而这个请求同样会被 `--dangerously-skip-permissions` 批准。因此它只是多一次失败的尝试，能触及的范围与其他 runner 相同。Arena 不会修改你的 `agy` 设置。
 
 请把 `arena run` 当作你自己以 “yolo” 模式同时运行三个 agent：
 

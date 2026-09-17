@@ -13,7 +13,12 @@ export const AGY_ASK_PRINT_TIMEOUT = "1h"
 /**
  * Antigravity CLI (`agy`) runner.
  *
- * Runs `agy -p` headlessly with --dangerously-skip-permissions. Two things differ from the other
+ * Runs `agy -p` headlessly with --dangerously-skip-permissions. agy has a terminal sandbox that no
+ * launch flag turns off (`enableTerminalSandbox` in the user's settings.json, honoured in print
+ * mode). With it on, commands start sandboxed, but the agent may rerun them unsandboxed and that
+ * request is auto-approved too, so the reach is the same as full permissions, only slower.
+ *
+ * Two things differ from the other
  * built-ins: agy does not work in the process cwd (it uses its own scratch directory) unless the
  * worktree is passed with --add-dir, and it cannot read the prompt from stdin, so the prompt travels
  * as a single `-p=<prompt>` argument (`-p <prompt>` could mistake a following flag for the prompt).
