@@ -25,26 +25,28 @@ Arena Core 是一个小巧、与宿主无关的 CLI。Claude Code 的 `/arena` s
 
 ## 安装
 
-一条命令，无需 checkout（需要 Node.js >= 22.18 和 npm）：
+已发布到 npm：[`ccc-arena`](https://www.npmjs.com/package/ccc-arena)（需要 Node.js >= 22.18）：
 
 ```bash
-npm install -g --install-links github:jacksuzuki/ccc-arena
+npm install -g ccc-arena
 arena install-skill
 arena doctor         # 在你要工作的项目中运行
 ```
 
-编译后的 CLI（`dist/`）已提交到仓库，因此安装不需要构建步骤，也不需要 devDependencies。`--install-links` 是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink，并随即删除该克隆，导致 `arena` 链接失效。可用 `#v0.1.0` 或 `#<commit>` 固定版本。不需要该参数的替代方案是 GitHub 的归档 tarball（`npm install -g https://github.com/jacksuzuki/ccc-arena/archive/refs/heads/main.tar.gz`），但它会安装整个仓库而不只是打包文件。更新时再次运行同一命令，然后执行 `arena install-skill --force`。卸载请运行 `npm uninstall -g ccc-arena`，如不再需要，可从 Claude Code 配置目录中删除 `skills/arena`。卸载包不会删除 arena 的会话和候选 worktree。如果安装后找不到 `arena`，请把 npm 的全局 bin 目录加入 PATH（macOS/Linux 为 `$(npm prefix -g)/bin`，Windows 为 `npm prefix -g`）。
+更新时运行 `npm install -g ccc-arena@latest`，然后执行 `arena install-skill --force`。卸载请运行 `npm uninstall -g ccc-arena`，如不再需要，可从 Claude Code 配置目录中删除 `skills/arena`。卸载包不会删除 arena 的会话和候选 worktree。如果安装后找不到 `arena`，请把 npm 的全局 bin 目录加入 PATH（macOS/Linux 为 `$(npm prefix -g)/bin`，Windows 为 `npm prefix -g`）。运行 arena 时需要 git，因为候选实现使用 git worktree。
 
 ### 免安装使用（npx）
 
 ```bash
-npx --package github:jacksuzuki/ccc-arena arena doctor
-npx --package github:jacksuzuki/ccc-arena arena run --players claude,codex --task "为 API 添加限流"
+npx ccc-arena doctor
+npx ccc-arena run --players claude,codex --task "为 API 添加限流"
 ```
 
-每次运行都会重新解析 git 包（约 5 秒开销）。Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到这种 npx 形式，但全局安装更快，并且可以不经确认直接使用 `/arena`。
+Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到 `npx ccc-arena`，但全局安装更快，并且可以不经确认直接使用 `/arena`。
 
-### 从 checkout 使用（开发）
+### 从 GitHub 或 checkout 使用
+
+编译后的 CLI（`dist/`）已提交到仓库，因此从仓库安装也不需要构建步骤：`npm install -g --install-links github:jacksuzuki/ccc-arena`（该参数是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink 并随即删除该克隆）或 `npx --package github:jacksuzuki/ccc-arena arena doctor`。可用 `#v0.1.0` 固定版本。开发用：
 
 ```bash
 git clone https://github.com/jacksuzuki/ccc-arena.git
@@ -54,8 +56,6 @@ npm run build        # dist/ 已提交；修改 src/ 后需重新构建
 npm link             # 把这个 checkout 暴露为 arena 命令
 arena install-skill
 ```
-
-`npm pack`（或 GitHub Release）生成的 `.tgz` 也可以用 `npm install -g ./ccc-arena-<version>.tgz` 安装。发布到 npm 之后，`npm install -g ccc-arena` 和 `npx ccc-arena` 也将可用。运行 arena 时需要 git，因为候选实现使用 git worktree。
 
 `arena install-skill` 会把内置 skill 复制到 `~/.claude/skills/arena/SKILL.md`；不需要 symlink 或仓库路径。安装后请重启 Claude Code。它遵循 `CLAUDE_CONFIG_DIR`，也可以用 `arena install-skill --config-dir /path/to/claude-config` 指定。重复执行是安全的：内容相同时不做任何改动，内容不同时除非传入 `--force`，否则保留现有文件。升级后更新 skill，或替换旧的基于 checkout 的 symlink 时，请使用 `--force`。
 
@@ -235,9 +235,7 @@ npm run build
 npm pack                     # 生成 ccc-arena-<version>.tgz
 ```
 
-直接分享生成的 `.tgz`，或把它附加到 release。接收者用 `npm install -g /path/to/ccc-arena-<version>.tgz` 安装，不需要源码 checkout 或 devDependencies。归档包含编译后的 JavaScript 和 Claude Code skill。运行时依赖由 npm 在安装时下载，因此这不是离线包。
-
-或者，拥有 registry 权限的维护者可以运行 `npm publish`（先选定可用的包名/版本）。`prepublishOnly` 钩子会在发布前运行 typecheck、单元测试和包冒烟测试。本仓库不会自动发布。
+发布流程：提升版本（`npm version patch|minor`），运行 `npm run build` 并提交 `dist/`，然后执行 `npm publish --access public --otp=<code>`（账号需启用 2FA），再 `git push --follow-tags`。`prepublishOnly` 钩子会先运行 typecheck、单元测试和包冒烟测试。本仓库不会自动发布。生成的 `.tgz` 也可以直接分享，用 `npm install -g ./ccc-arena-<version>.tgz` 安装。
 
 ## v0.1 不包含
 

@@ -14,7 +14,7 @@
     "url": "https://github.com/jacksuzuki/ccc-arena/issues"
   },
   "bin": {
-    "arena": "./dist/arena.js"
+    "arena": "dist/arena.js"
   },
   "files": [
     "dist",

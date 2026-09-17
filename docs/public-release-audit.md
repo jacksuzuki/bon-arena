@@ -219,6 +219,6 @@ git check-ignore --no-index .env.example .env.test.example .claude/skills/arena/
    実体コピーになり動作する。加えて `prepare` を廃止し、ビルド済み `dist/` をコミットしているので、
    `npm install -g --install-links github:jacksuzuki/ccc-arena`、`npx --package github:jacksuzuki/ccc-arena arena …`、
    GitHub の archive tarball URL のいずれもビルド無しで動く。CI の `npm run check:dist` が `dist/` の陳腐化を
-   検出する。npm に publish したら README の Install 節を更新する。
+   検出する。2026-09-17 に `ccc-arena@0.1.0` として npm に publish 済み（`npm install -g ccc-arena` / `npx ccc-arena`）。
 8. ネットワークが使える環境で `npm run test:package` を完走させる。
 9. 最終変更をレビューし、公開対象の branch / tag とファイルを再走査してから push する。

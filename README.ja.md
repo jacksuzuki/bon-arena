@@ -25,26 +25,28 @@ Arena Core はハーネスに依存しない小さな CLI です。Claude Code �
 
 ## インストール
 
-checkout 不要、1コマンドです（Node.js >= 22.18 と npm が必要）。
+npm に [`ccc-arena`](https://www.npmjs.com/package/ccc-arena) として公開しています（Node.js >= 22.18）。
 
 ```bash
-npm install -g --install-links github:jacksuzuki/ccc-arena
+npm install -g ccc-arena
 arena install-skill
 arena doctor         # 作業したいプロジェクトで実行
 ```
 
-コンパイル済みの CLI（`dist/`）をコミットしているので、インストールにビルド工程も devDependencies も不要です。`--install-links` は必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除するため `arena` がリンク切れになります。`#v0.1.0` や `#<commit>` でバージョンを固定できます。フラグ不要の代替として GitHub の archive tarball（`npm install -g https://github.com/jacksuzuki/ccc-arena/archive/refs/heads/main.tar.gz`）も使えますが、パッケージ対象ファイルだけでなくリポジトリ全体が配置されます。更新は同じコマンドを再実行し、続けて `arena install-skill --force` を実行します。アンインストールは `npm uninstall -g ccc-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。
+更新は `npm install -g ccc-arena@latest` を実行し、続けて `arena install-skill --force` を実行します。アンインストールは `npm uninstall -g ccc-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。候補の実装は git worktree を使うので、arena の実行には git が必要です。
 
 ### インストールなしで使う（npx）
 
 ```bash
-npx --package github:jacksuzuki/ccc-arena arena doctor
-npx --package github:jacksuzuki/ccc-arena arena run --players claude,codex --task "API にレート制限を追加"
+npx ccc-arena doctor
+npx ccc-arena run --players claude,codex --task "API にレート制限を追加"
 ```
 
-実行のたびに git パッケージを解決し直すため、毎回 5 秒ほどのオーバーヘッドがあります。Claude Code の skill は PATH 上の `arena` を呼び、無ければこの npx 形式にフォールバックしますが、グローバルインストールの方が速く、`/arena` を確認なしで使えます。
+Claude Code の skill は PATH 上の `arena` を呼び、無ければ `npx ccc-arena` にフォールバックしますが、グローバルインストールの方が速く、`/arena` を確認なしで使えます。
 
-### checkout から使う（開発用）
+### GitHub や checkout から使う
+
+コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/ccc-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/ccc-arena arena doctor` です。`#v0.1.0` でバージョンを固定できます。開発用:
 
 ```bash
 git clone https://github.com/jacksuzuki/ccc-arena.git
@@ -54,8 +56,6 @@ npm run build        # dist/ はコミット対象。src/ を変えたら再ビ�
 npm link             # この checkout を arena コマンドとして公開
 arena install-skill
 ```
-
-`npm pack`（または GitHub Release）の `.tgz` も `npm install -g ./ccc-arena-<version>.tgz` でインストールできます。npm に公開された後は `npm install -g ccc-arena` と `npx ccc-arena` も使えます。候補の実装は git worktree を使うので、arena の実行には git が必要です。
 
 `arena install-skill` は同梱の skill を `~/.claude/skills/arena/SKILL.md` にコピーします。symlink もリポジトリのパスも不要です。インストール後は Claude Code を再起動してください。`CLAUDE_CONFIG_DIR` を尊重し、`arena install-skill --config-dir /path/to/claude-config` でも指定できます。繰り返し実行しても安全で、同一内容なら何もせず、内容が異なる場合は `--force` を付けない限り既存のものを保持します。アップグレード後の skill 更新や、以前の checkout ベースの symlink を置き換えるときは `--force` を使います。
 
@@ -235,9 +235,7 @@ npm run build
 npm pack                     # ccc-arena-<version>.tgz を生成
 ```
 
-生成した `.tgz` を直接配布するか、リリースに添付します。受け取った側は `npm install -g /path/to/ccc-arena-<version>.tgz` でインストールでき、ソースの checkout や devDependencies は不要です。アーカイブにはコンパイル済み JavaScript と Claude Code の skill が含まれます。実行時依存はインストール時に npm がダウンロードするので、オフラインバンドルではありません。
-
-あるいは、レジストリへのアクセス権を持つメンテナが `npm publish` を実行できます（利用可能なパッケージ名/バージョンを選んでから）。`prepublishOnly` フックが公開前に typecheck、ユニットテスト、パッケージのスモークテストを実行します。このリポジトリは自動公開しません。
+リリース手順: バージョンを上げ（`npm version patch|minor`）、`npm run build` で `dist/` を再生成してコミットし、`npm publish --access public --otp=<code>`（アカウントは 2FA 必須）を実行してから `git push --follow-tags` します。`prepublishOnly` フックが先に typecheck、ユニットテスト、パッケージのスモークテストを実行します。このリポジトリは自動公開しません。生成した `.tgz` を直接配布して `npm install -g ./ccc-arena-<version>.tgz` でインストールしてもらうこともできます。
 
 ## v0.1 に含まれないもの
 

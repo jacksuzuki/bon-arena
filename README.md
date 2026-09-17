@@ -27,38 +27,38 @@ other hosts (Codex, standalone use, other harnesses) can drive the same CLI.
 
 ## Install
 
-One command, no checkout (Node.js >= 22.18 and npm):
+Published on npm as [`ccc-arena`](https://www.npmjs.com/package/ccc-arena) (Node.js >= 22.18):
 
 ```bash
-npm install -g --install-links github:jacksuzuki/ccc-arena
+npm install -g ccc-arena
 arena install-skill
 arena doctor         # run in the project you want to work on
 ```
 
-The compiled CLI (`dist/`) is committed, so the install needs no build step and no dev
-dependencies. `--install-links` matters: without it npm 10 installs a git package as a symlink to
-a temporary clone that it deletes right away, leaving a dangling `arena`. Pin a version with
-`#v0.1.0` or `#<commit>`. An alternative that needs no flag is GitHub's archive tarball
-(`npm install -g https://github.com/jacksuzuki/ccc-arena/archive/refs/heads/main.tar.gz`), which
-installs the whole repository instead of just the packaged files. To update, run the same command again
-and then `arena install-skill --force`. To uninstall, run `npm uninstall -g ccc-arena` and remove
-`skills/arena` from your Claude Code config directory if no longer needed. Arena sessions and
-candidate worktrees are not removed by uninstalling the package. If `arena` is not found after
-installation, add the npm global bin directory to PATH (`$(npm prefix -g)/bin` on macOS/Linux,
-`npm prefix -g` on Windows).
+To update, run `npm install -g ccc-arena@latest` and then `arena install-skill --force`. To
+uninstall, run `npm uninstall -g ccc-arena` and remove `skills/arena` from your Claude Code config
+directory if no longer needed. Arena sessions and candidate worktrees are not removed by
+uninstalling the package. If `arena` is not found after installation, add the npm global bin
+directory to PATH (`$(npm prefix -g)/bin` on macOS/Linux, `npm prefix -g` on Windows). git is
+required when running arenas because candidate implementations use git worktrees.
 
 ### Zero-install (npx)
 
 ```bash
-npx --package github:jacksuzuki/ccc-arena arena doctor
-npx --package github:jacksuzuki/ccc-arena arena run --players claude,codex --task "Add rate limiting"
+npx ccc-arena doctor
+npx ccc-arena run --players claude,codex --task "Add rate limiting"
 ```
 
-Each run re-resolves the git package (about 5 s of overhead). The Claude Code skill calls `arena`
-from PATH and falls back to this npx form when it is missing, but the global install is faster and
-lets you use `/arena` without any prompt.
+The Claude Code skill calls `arena` from PATH and falls back to `npx ccc-arena` when it is
+missing, but the global install is faster and lets you use `/arena` without any prompt.
 
-### From a checkout (development)
+### From GitHub or a checkout
+
+The compiled CLI (`dist/`) is committed, so the repository installs without a build step:
+`npm install -g --install-links github:jacksuzuki/ccc-arena` (the flag matters: without it npm 10
+installs a git package as a symlink to a temporary clone that it deletes right away) or
+`npx --package github:jacksuzuki/ccc-arena arena doctor`. Pin a version with `#v0.1.0`. For
+development:
 
 ```bash
 git clone https://github.com/jacksuzuki/ccc-arena.git
@@ -68,10 +68,6 @@ npm run build        # dist/ is committed; rebuild after changing src/
 npm link             # expose this checkout as the arena command
 arena install-skill
 ```
-
-A `.tgz` from `npm pack` (or a GitHub release) also installs with `npm install -g ./ccc-arena-<version>.tgz`.
-Once the package is published to npm, `npm install -g ccc-arena` and `npx ccc-arena` will work too.
-git is required when running arenas because candidate implementations use git worktrees.
 
 `arena install-skill` copies the bundled skill to `~/.claude/skills/arena/SKILL.md`; no symlink or
 repository path is needed. Restart Claude Code after installation. It respects `CLAUDE_CONFIG_DIR`,
@@ -294,14 +290,11 @@ npm run build
 npm pack                     # produces ccc-arena-<version>.tgz
 ```
 
-Share the generated `.tgz` directly or attach it to a release. Recipients install it with
-`npm install -g /path/to/ccc-arena-<version>.tgz`; they do not need the source checkout or dev
-dependencies. The archive includes compiled JavaScript and the Claude Code skill. npm downloads
-the runtime dependencies during installation, so this is not an offline bundle.
-
-Alternatively, a maintainer with registry access can run `npm publish` (after choosing an available
-package name/version). The `prepublishOnly` hook runs typecheck, unit tests and the package smoke
-test before publication. This repository does not publish automatically.
+Release: bump the version (`npm version patch|minor`), run `npm run build` and commit `dist/`, then
+`npm publish --access public --otp=<code>` (the account requires 2FA) and `git push --follow-tags`.
+The `prepublishOnly` hook runs typecheck, unit tests and the package smoke test first. This
+repository does not publish automatically. The generated `.tgz` can also be shared directly and
+installed with `npm install -g ./ccc-arena-<version>.tgz`.
 
 ## Not in v0.1
 
