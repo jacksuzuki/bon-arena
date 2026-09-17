@@ -33,6 +33,8 @@ export interface WorkspaceIntegration {
    * they are doing right now when the session file cannot tell (e.g. "reviewing the final version").
    */
   sync(session: Session, activity?: Record<string, string>): SyncEntry[]
+  /** Things the user should know before relying on the app's view of this repository (e.g. candidates will be hidden). */
+  notes(repository: string): string[]
   /** Once, right after the runners started: give every candidate a terminal that shows its live progress. */
   attach(session: Session): SyncEntry[]
   /** Bring a candidate's worktree and changed files up in the app. */

@@ -209,6 +209,9 @@ arena logs latest claude --follow   # 在任意终端查看同样的实时输出
 `--follow` 会持续输出 runner 的 stdout/stderr。Claude Code 在 print 模式下结束前没有任何输出，
 因此对 Claude 改为显示实时会话 transcript（助手文本以及每次工具调用一行）。
 
+如果 Orca 中该项目设置为隐藏外部 worktree，候选虽已打上标签，却会收在侧边栏折叠的 “Hiding … discovered worktrees” 行里；
+此时 `arena doctor` 和 `arena start` 会输出 `note:`。展开该行，或在项目设置中改为显示外部 worktree。
+
 配置项为 `integrations.orca: auto | true | false`（默认 `auto` = 仅在 Orca 内运行时启用）。该集成只负责展示，
 且为 best effort：runner 仍由 Arena 以 headless 方式启动，`arena ask` / `arena review` 与 runner 隔离不受影响；
 `orca` CLI 缺失或失败时只会输出警告。Superset 无法显示非自身创建的 worktree，因此暂无 Superset 集成。

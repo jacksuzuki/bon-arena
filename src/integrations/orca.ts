@@ -64,7 +64,7 @@ export function orcaComment(session: Session, player: Player, now = Date.now(), 
 export function createOrcaIntegration(opts: OrcaOptions): WorkspaceIntegration {
   const command = opts.command ?? "orca"
 
-  function run(args: string[]): void {
+  function run(args: string[]): Record<string, any> {
     let out: string
     try {
       out = opts.exec(command, [...args, "--json"])
@@ -73,13 +73,31 @@ export function createOrcaIntegration(opts: OrcaOptions): WorkspaceIntegration {
       out = e.stdout ? String(e.stdout) : ""
       if (!out.trim()) throw new Error(e.message)
     }
-    let parsed: { ok?: boolean; error?: { code?: string; message?: string } }
+    let parsed: { ok?: boolean; result?: Record<string, any>; error?: { code?: string; message?: string } }
     try {
       parsed = JSON.parse(out)
     } catch {
       throw new Error(`unexpected output from ${command} ${args.slice(0, 2).join(" ")}`)
     }
     if (!parsed.ok) throw new Error(parsed.error?.code ?? parsed.error?.message ?? "orca command failed")
+    return parsed.result ?? {}
+  }
+
+  // Orca can hide worktrees it did not create (a per-repository setting). Labels and terminals still
+  // work then, but the candidates sit in a collapsed "discovered worktrees" group: say so up front.
+  function notes(repository: string): string[] {
+    try {
+      const repoId = run(["worktree", "show", "--worktree", selector(repository)]).worktree?.repoId
+      if (!repoId) return []
+      const visibility = run(["repo", "show", "--repo", `id:${repoId}`]).repo?.externalWorktreeVisibility
+      return visibility === "hide"
+        ? [
+            "Orca hides discovered worktrees for this project, so the candidates are labelled but tucked away: expand the \"Hiding … discovered worktrees\" row in the sidebar, or switch the project to show external worktrees.",
+          ]
+        : []
+    } catch {
+      return [] // repository unknown to Orca, or an older CLI: nothing useful to say
+    }
   }
 
   function status(): IntegrationStatus {
@@ -141,5 +159,5 @@ export function createOrcaIntegration(opts: OrcaOptions): WorkspaceIntegration {
     run(["file", "open-changed", "--mode", "diff", "--worktree", selector(player.worktree)])
   }
 
-  return { id: "orca", label: "Orca", status, sync, attach, open }
+  return { id: "orca", label: "Orca", status, notes, sync, attach, open }
 }

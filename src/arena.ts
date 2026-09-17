@@ -33,7 +33,7 @@ import { installSkill } from "./install.ts"
 import { buildRefineContext, defaultTaskMode, renderRefineBrief } from "./refine.ts"
 import { describeHost, detectHost } from "./host.ts"
 import { followPlayer } from "./follow.ts"
-import { createIntegrations, integrationStatuses, syncIntegrations } from "./integrations/index.ts"
+import { createIntegrations, integrationNotes, integrationStatuses, syncIntegrations } from "./integrations/index.ts"
 
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
 
@@ -210,8 +210,9 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   const taskMode = defaultTaskMode(root)
   const host = detectHost(root)
   const integrations = integrationStatuses(loadConfig(root))
+  const integrationCaveats = repoInfo ? integrationNotes(loadConfig(root), root) : []
   if (values.json) {
-    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup, taskMode, refine: taskMode === "refined", host, integrations }, null, 2))
+    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup, taskMode, refine: taskMode === "refined", host, integrations, integrationNotes: integrationCaveats }, null, 2))
     return
   }
   print("Arena doctor")
@@ -240,6 +241,7 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   print("")
   print("workspace apps")
   for (const i of integrations) print(`  ${i.id.padEnd(10)} ${i.active ? "✓" : "–"} ${i.detail}`)
+  for (const note of integrationCaveats) print(`  note: ${note}`)
   const missing = runners.filter((r) => !r.available && (r.id === "claude" || r.id === "codex"))
   if (missing.length) process.exitCode = 1
 }

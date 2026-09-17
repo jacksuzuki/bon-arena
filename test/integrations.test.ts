@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ArenaConfigSchema, loadConfig } from "../src/config.ts"
-import { integrationStatuses, syncIntegrations } from "../src/integrations/index.ts"
+import { integrationNotes, integrationStatuses, syncIntegrations } from "../src/integrations/index.ts"
 import { renderTranscriptLine } from "../src/follow.ts"
 import { createOrcaIntegration, insideOrca, orcaComment, orcaWorkspaceStatus } from "../src/integrations/orca.ts"
 import { SessionSchema, type Session } from "../src/session.ts"
@@ -200,4 +200,22 @@ test("renderTranscriptLine keeps assistant text and one line per tool call", () 
   assert.deepEqual(renderTranscriptLine("{partial"), [])
   const long = renderTranscriptLine(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command: "x".repeat(500) } }] } }))[0]!
   assert.equal(long.length, "▸ Bash  ".length + 160)
+})
+
+test("orca notes: warns when the project hides discovered worktrees, stays quiet otherwise", () => {
+  const config = ArenaConfigSchema.parse({})
+  const deps = (visibility: string | null) => ({
+    env: { TERM_PROGRAM: "Orca" },
+    commandExists: () => true,
+    exec: (_c: string, args: string[]) => {
+      if (args[0] === "worktree") return JSON.stringify({ ok: true, result: { worktree: { repoId: "r1" } } })
+      assert.deepEqual(args.slice(0, 4), ["repo", "show", "--repo", "id:r1"])
+      if (visibility === null) throw new Error("boom")
+      return JSON.stringify({ ok: true, result: { repo: { externalWorktreeVisibility: visibility } } })
+    },
+  })
+  assert.match(integrationNotes(config, "/repo/demo", deps("hide"))[0]!, /^Orca: Orca hides discovered worktrees for this project/)
+  assert.deepEqual(integrationNotes(config, "/repo/demo", deps("show")), [])
+  assert.deepEqual(integrationNotes(config, "/repo/demo", deps(null)), [])
+  assert.deepEqual(integrationNotes(config, "/repo/demo", { ...deps("hide"), env: {} }), []) // inactive outside Orca
 })

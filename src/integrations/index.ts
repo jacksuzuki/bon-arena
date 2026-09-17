@@ -42,6 +42,13 @@ export function integrationStatuses(config: ArenaConfig, deps: IntegrationDeps =
   return createIntegrations(config, deps).map((i) => i.status())
 }
 
+/** Caveats of the active integrations for this repository, prefixed with the app's name. */
+export function integrationNotes(config: ArenaConfig, repository: string, deps: IntegrationDeps = {}): string[] {
+  return createIntegrations(config, deps)
+    .filter((i) => i.status().active)
+    .flatMap((i) => i.notes(repository).map((n) => `${i.label}: ${n}`))
+}
+
 export interface SyncOptions {
   /** What players are doing right now, by player id, when the session file cannot tell (review, ask). */
   activity?: Record<string, string>
@@ -64,7 +71,10 @@ export async function syncIntegrations(session: Session, config: ArenaConfig, op
         await new Promise((r) => setTimeout(r, opts.retryDelayMs ?? 2000))
         entries = integration.sync(session, opts.activity)
       }
-      if (opts.attach && entries.every((e) => e.ok)) entries = integration.attach(session)
+      if (opts.attach && entries.every((e) => e.ok)) {
+        entries = integration.attach(session)
+        for (const note of integration.notes(session.repository)) log(`note: ${integration.label}: ${note}`)
+      }
       const failed = entries.filter((e) => !e.ok)
       if (failed.length) log(`warning: ${integration.label} integration: ${failed.map((e) => `${e.player}: ${e.error}`).join("; ")}`)
     } catch (err) {

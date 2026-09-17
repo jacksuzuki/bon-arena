@@ -210,6 +210,10 @@ arena logs latest claude --follow   # 同じライブ表示を任意のターミ
 `--follow` は runner の stdout/stderr を追いかけて表示します。Claude Code は print モードでは完了まで何も
 出力しないため、Claude については会話 transcript（アシスタントの発言とツール呼び出し 1 行ずつ）を代わりに表示します。
 
+Orca 側でそのプロジェクトが「外部 worktree を隠す」設定になっていると、候補はラベル付けされてもサイドバーの
+折りたたまれた「Hiding … discovered worktrees」行の中に入ります。その場合 `arena doctor` と `arena start` が `note:` を
+表示します。行を展開するか、プロジェクトの設定で外部 worktree を表示にしてください。
+
 設定は `integrations.orca: auto | true | false`（既定 `auto` = Orca 内で実行中のみ）。連携は表示専用かつ
 best effort です。runner は従来どおり Arena が headless で起動するため `arena ask` / `arena review` や
 runner の隔離はそのまま機能し、`orca` CLI が無い・失敗した場合も警告が出るだけです。Superset は自分で

@@ -258,7 +258,9 @@ Present a concise comparison to the user:
 When `arena doctor` lists a workspace app as active (Orca), the candidates already appear in its
 sidebar as `arena <id> · <Label>` with their status, grouped under the worktree the arena was
 started from, each with a `<Label> (live)` terminal streaming the runner's progress; the CLI keeps
-that in sync on its own. Mention once that `arena open <id> <player>`
+that in sync on its own. If `arena doctor` or `arena start` printed a `note:` about the app (e.g.
+Orca hides discovered worktrees for this project), relay that note instead of claiming the
+candidates are visible. Mention once that `arena open <id> <player>`
 shows a candidate's changed files as diffs in the app, and run it when the user wants to look.
 
 ### 9. What next?

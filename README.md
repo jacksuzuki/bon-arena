@@ -269,6 +269,10 @@ arena logs latest claude --follow   # the same live view in any terminal
 it is done, so for Claude the live conversation transcript is shown instead (assistant text and one
 line per tool call).
 
+If the Orca project is set to hide external worktrees, the candidates are labelled but sit in the
+collapsed "Hiding … discovered worktrees" row of the sidebar; `arena doctor` and `arena start` print a
+`note:` when that is the case. Expand the row or let the project show external worktrees.
+
 The integration is display-only and best effort: runners are still launched headless by Arena (so
 `arena ask` / `arena review`, session pinning and runner isolation keep working), and a missing or
 failing `orca` CLI only prints a warning. Superset has no way to show a worktree it did not create,
