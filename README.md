@@ -57,7 +57,7 @@ missing, but the global install is faster and lets you use `/arena` without any 
 The compiled CLI (`dist/`) is committed, so the repository installs without a build step:
 `npm install -g --install-links github:jacksuzuki/ccc-arena` (the flag matters: without it npm 10
 installs a git package as a symlink to a temporary clone that it deletes right away) or
-`npx --package github:jacksuzuki/ccc-arena arena doctor`. Pin a version with `#v0.1.0`. For
+`npx --package github:jacksuzuki/ccc-arena arena doctor`. Pin a version with `#v0.2.0`. For
 development:
 
 ```bash
