@@ -1,5 +1,8 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { formatDuration, renderSummary, renderStatus, renderCompareBundle } from "../src/compare/summary.ts"
 import type { Session } from "../src/session.ts"
 
@@ -32,6 +35,7 @@ const session: Session = {
       stdoutPath: "/o",
       stderrPath: "/e",
       exitCodePath: "/x",
+      asks: [],
       result: {
         runnerId: "claude",
         durationMs: 391000,
@@ -57,6 +61,7 @@ const session: Session = {
       stdoutPath: "/o",
       stderrPath: "/e",
       exitCodePath: "/x",
+      asks: [],
     },
   ],
 }
@@ -117,4 +122,33 @@ test("renderSynthesisBrief names the base worktree and includes the other candid
   const summary = renderSummary({ ...withSynthesis, adopted: { player: "claude", mode: "merge", commit: "fedcba987654321", at: "x" } })
   assert.match(summary, /Synthesis: base claude \(in progress\)/)
   assert.match(summary, /Adopted: claude via merge → fedcba987654/)
+})
+
+test("answers from arena ask appear in the summary and the compare bundle", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "arena-ask-summary-"))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const answerPath = join(dir, "claude.ask-1.md")
+  writeFileSync(answerPath, "The retry lives in src/client.ts; the third attempt is skipped because of an off-by-one.\n")
+  const asked: Session = {
+    ...session,
+    players: [
+      {
+        ...session.players[0]!,
+        runnerSession: "11111111-2222-4333-8444-555555555555",
+        asks: [
+          { n: 1, question: "Why does the third retry never run?", askedAt: "2026-09-17T00:20:00.000Z", durationMs: 42000, exitCode: 0, promptPath: "/p", answerPath, stderrPath: "/e", timedOut: false, worktreeChanged: false },
+          { n: 2, question: "Did you run the tests?", askedAt: "2026-09-17T00:21:00.000Z", durationMs: 1000, exitCode: 1, promptPath: "/p", answerPath: "/nonexistent", stderrPath: "/e", timedOut: false, worktreeChanged: true },
+        ],
+      },
+      session.players[1]!,
+    ],
+  }
+  const summary = renderSummary(asked)
+  assert.match(summary, /questions     2 answered \(arena ask\)  ⚠ worktree changed since collect/)
+  assert.doesNotMatch(renderSummary(session), /questions/)
+  const bundle = renderCompareBundle(asked)
+  assert.match(bundle, /### Questions answered by Claude \(arena ask\)\n\n\*\*Q1\.\*\* Why does the third retry never run\?\n\n\*\*A1\.\*\*\n\nThe retry lives in src\/client\.ts/)
+  assert.match(bundle, /\*\*A2\.\*\* _\(runner exited with 1\)_ _\(warning: the worktree changed while answering\)_\n\n_\(no answer\)_/)
+  assert.ok(bundle.indexOf("### Questions answered") < bundle.indexOf("### Diff"))
+  assert.doesNotMatch(renderCompareBundle(session), /Questions answered/)
 })

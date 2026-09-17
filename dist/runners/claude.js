@@ -1,5 +1,27 @@
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { commandExists } from "./available.js";
+/** Tools a resumed Claude conversation may use while answering a question: read-only inspection only. */
+export const CLAUDE_ASK_ALLOWED_TOOLS = [
+    "Read",
+    "Glob",
+    "Grep",
+    "LS",
+    "Bash(git diff:*)",
+    "Bash(git log:*)",
+    "Bash(git show:*)",
+    "Bash(git status:*)",
+    "Bash(git blame:*)",
+    "Bash(cat:*)",
+    "Bash(ls:*)",
+    "Bash(head:*)",
+    "Bash(tail:*)",
+    "Bash(wc:*)",
+    "Bash(grep:*)",
+    "Bash(rg:*)",
+    "Bash(find:*)",
+];
+export const CLAUDE_ASK_DISALLOWED_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Agent", "Task"];
 /**
  * Claude Code CLI runner.
  *
@@ -9,6 +31,15 @@ import { commandExists } from "./available.js";
  */
 export function createClaudeRunner(config = {}) {
     const command = config.command ?? "claude";
+    // Auto-memory is keyed by repository, so a runner inside a worktree would read and write the
+    // host project's memory. Disable it (setting + env, both honoured by Claude Code).
+    const memoryOff = ["--settings", JSON.stringify({ autoMemoryEnabled: false })];
+    const env = (resultsDir) => ({
+        CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+        ...(config.env ?? {}),
+        // Where Claude's own transcript for this run lands is up to Claude; we just tag the run.
+        ARENA_RESULTS_DIR: join(resultsDir),
+    });
     return {
         id: "claude",
         label: config.label ?? "Claude",
@@ -16,23 +47,34 @@ export function createClaudeRunner(config = {}) {
             return commandExists(command);
         },
         invocation(input) {
-            // Auto-memory is keyed by repository, so a runner inside a worktree would read and write the
-            // host project's memory. Disable it (setting + env, both honoured by Claude Code).
-            const args = ["-p", "--dangerously-skip-permissions", "--output-format", "text", "--settings", JSON.stringify({ autoMemoryEnabled: false })];
+            // Fix the conversation id up front so the finished conversation can be resumed for `arena ask`.
+            const sessionId = randomUUID();
+            const args = ["-p", "--dangerously-skip-permissions", "--output-format", "text", "--session-id", sessionId, ...memoryOff];
             if (config.model)
                 args.push("--model", config.model);
             args.push(...(config.extraArgs ?? []));
-            return {
-                command,
-                args,
-                promptViaStdin: true,
-                env: {
-                    CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
-                    ...(config.env ?? {}),
-                    // Where Claude's own transcript for this run lands is up to Claude; we just tag the run.
-                    ARENA_RESULTS_DIR: join(input.resultsDir),
-                },
-            };
+            return { command, args, promptViaStdin: true, env: env(input.resultsDir), sessionId };
+        },
+        askInvocation(input) {
+            // Resume the implementation conversation, but only with inspection tools: `dontAsk` denies
+            // anything outside the allow list instead of prompting, and edits are denied outright.
+            const args = [
+                "-p",
+                "--resume",
+                input.sessionId,
+                "--output-format",
+                "text",
+                "--permission-mode",
+                "dontAsk",
+                "--allowedTools",
+                CLAUDE_ASK_ALLOWED_TOOLS.join(","),
+                "--disallowedTools",
+                CLAUDE_ASK_DISALLOWED_TOOLS.join(","),
+                ...memoryOff,
+            ];
+            if (config.model)
+                args.push("--model", config.model);
+            return { command, args, promptViaStdin: true, env: env(input.resultsDir) };
         },
     };
 }

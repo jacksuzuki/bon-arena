@@ -8,6 +8,7 @@ import { parseArgs } from "node:util"
 import { resolve } from "node:path"
 import {
   adoptCandidate,
+  askPlayer,
   checkRunners,
   cleanArena,
   finishSynthesis,
@@ -54,6 +55,9 @@ Usage:
   arena compare <id|latest> [--max-diff-bytes <n>]  Print the markdown review bundle for an LLM/human reviewer
   arena diff <id|latest> <player>                   Print a candidate's diff
   arena logs <id|latest> <player> [--stderr]        Print a runner's output log
+  arena ask <id|latest> <player> [question] [--question-file <f>] [--timeout <sec>] [--json]
+                                                    Resume the finished runner's own conversation inside its worktree with a
+                                                    read-only question (Claude session / Codex thread) and print its answer
   arena select <id|latest> <player|none>            Record the adopted candidate and print its branch
   arena commit <id|latest> <player> [-m <msg>]      Commit the candidate worktree onto its branch
   arena synthesize <id|latest> <winner>             Start the finishing pass: snapshot + select the winner, print a brief
@@ -387,6 +391,53 @@ function cmdLogs(argv: Argv): void {
   process.stdout.write(text)
 }
 
+async function cmdAsk(argv: Argv): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      question: { type: "string", short: "q" },
+      "question-file": { type: "string" },
+      timeout: { type: "string" },
+      json: { type: "boolean" },
+    },
+  })
+  const id = sessionArg(positionals)
+  const ref = positionals[1]
+  if (!ref) fail("player required")
+  let question: string
+  if (values["question-file"]) {
+    const p = resolve(values["question-file"])
+    if (!existsSync(p)) fail(`question file not found: ${p}`)
+    question = readFileSync(p, "utf8")
+  } else if (values.question) {
+    question = values.question
+  } else if (positionals.length > 2) {
+    question = positionals.slice(2).join(" ")
+  } else if (!process.stdin.isTTY) {
+    question = readFileSync(0, "utf8")
+  } else {
+    question = ""
+  }
+  if (!question.trim()) fail("question is required (positional text, --question, --question-file, or stdin)")
+  const r = await askPlayer(id, ref, question, {
+    timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
+    log: (l) => process.stderr.write(`${l}\n`),
+  })
+  if (values.json) {
+    print(JSON.stringify({ session: r.session.id, player: r.player.id, ask: r.ask, answer: r.answer }, null, 2))
+    return
+  }
+  const trailer: string[] = []
+  if (r.ask.timedOut) trailer.push(`[arena] ${r.player.label} timed out after ${formatDuration(r.ask.durationMs)}`)
+  else if (r.ask.exitCode !== 0) trailer.push(`[arena] ${r.player.label} exited with ${r.ask.exitCode ?? "signal"} (see ${r.ask.stderrPath})`)
+  if (r.ask.worktreeChanged) trailer.push(`[arena] warning: ${r.player.label}'s worktree changed while answering; re-run: arena collect ${r.session.id} --player ${r.player.id}`)
+  trailer.push(`[arena] answer #${r.ask.n} saved: ${r.ask.answerPath} (${formatDuration(r.ask.durationMs)})`)
+  print(r.answer.trim() ? r.answer : "(empty answer)")
+  process.stderr.write(trailer.join("\n") + "\n")
+  if (r.ask.timedOut || (r.ask.exitCode !== 0 && !r.answer.trim())) process.exitCode = 1
+}
+
 function cmdSelect(argv: Argv): void {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } })
   const id = sessionArg(positionals)
@@ -542,6 +593,8 @@ async function main(): Promise<void> {
         return cmdDiff(rest)
       case "logs":
         return cmdLogs(rest)
+      case "ask":
+        return await cmdAsk(rest)
       case "select":
         return cmdSelect(rest)
       case "commit":

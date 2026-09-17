@@ -45,6 +45,25 @@ export const SetupResultSchema = z.object({
 })
 export type SetupResult = z.infer<typeof SetupResultSchema>
 
+/** One follow-up question put to a finished runner via `arena ask`, and where its answer is. */
+export const AskRecordSchema = z.object({
+  /** 1-based sequence number within the player. */
+  n: z.number(),
+  question: z.string(),
+  askedAt: z.string(),
+  durationMs: z.number(),
+  exitCode: z.number().nullable(),
+  /** Full prompt sent to the runner. */
+  promptPath: z.string(),
+  /** The runner's answer (stdout). */
+  answerPath: z.string(),
+  stderrPath: z.string(),
+  timedOut: z.boolean().default(false),
+  /** True when the worktree differed after the answer; results collected before are then stale. */
+  worktreeChanged: z.boolean().default(false),
+})
+export type AskRecord = z.infer<typeof AskRecordSchema>
+
 export const PlayerSchema = z.object({
   /** Unique within the session. Equals the runner id unless the same runner plays twice. */
   id: z.string(),
@@ -62,6 +81,10 @@ export const PlayerSchema = z.object({
   stderrPath: z.string(),
   exitCodePath: z.string(),
   command: z.string().optional(),
+  /** The runner's own conversation id (Claude session id / Codex thread id), once known. Lets `arena ask` resume it. */
+  runnerSession: z.string().optional(),
+  /** Follow-up questions answered by the runner after it finished (`arena ask`). */
+  asks: z.array(AskRecordSchema).default([]),
   setup: SetupResultSchema.optional(),
   result: CandidateResultSchema.optional(),
 })

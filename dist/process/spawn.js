@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 /** Environment for runner subprocesses: inherit, drop the parent Claude Code session markers, add overrides. */
@@ -49,6 +49,52 @@ export function spawnDetached(opts) {
         throw new Error(`Failed to spawn supervisor for ${opts.command}`);
     }
     return child.pid;
+}
+/**
+ * Run a runner subprocess in the foreground (used for follow-up questions), with stdin from the
+ * prompt file and stdout/stderr captured to files. The whole process group is killed on timeout.
+ */
+export function runForeground(opts) {
+    mkdirSync(dirname(opts.stdoutPath), { recursive: true });
+    return new Promise((resolve) => {
+        const started = Date.now();
+        const stdin = opts.promptViaStdin ? openSync(opts.promptPath, "r") : "ignore";
+        const stdout = openSync(opts.stdoutPath, "w");
+        const stderr = openSync(opts.stderrPath, "w");
+        const child = spawn(opts.command, opts.args, {
+            cwd: opts.cwd,
+            env: runnerEnvironment(opts.env),
+            stdio: [stdin, stdout, stderr],
+            detached: true,
+        });
+        let timedOut = false;
+        const timer = opts.timeoutMs
+            ? setTimeout(() => {
+                timedOut = true;
+                if (child.pid !== undefined)
+                    killProcessGroup(child.pid, "SIGKILL");
+            }, opts.timeoutMs)
+            : null;
+        const done = (exitCode) => {
+            if (timer)
+                clearTimeout(timer);
+            try {
+                if (typeof stdin === "number")
+                    closeSync(stdin);
+                closeSync(stdout);
+                closeSync(stderr);
+            }
+            catch {
+                /* ignore */
+            }
+            resolve({ exitCode, timedOut, durationMs: Date.now() - started });
+        };
+        child.on("error", (err) => {
+            writeFileSync(opts.stderrPath, `\n[arena] failed to start ${opts.command}: ${err.message}\n`, { flag: "a" });
+            done(127);
+        });
+        child.on("exit", (code) => done(code));
+    });
 }
 export function isProcessAlive(pid) {
     try {

@@ -142,6 +142,7 @@ arena start --players claude,codex --task-file task.md
 arena wait latest
 arena collect latest
 arena compare latest        # markdown bundle for an LLM or human reviewer
+arena ask latest codex "Why is the retry capped at 2?"   # resume the runner's own conversation, read-only
 arena select latest codex
 arena commit latest codex   # snapshot worktree changes onto the candidate branch
 arena adopt latest          # merge the selected branch into the current branch (--ff / --squash)
@@ -181,7 +182,7 @@ Layout on disk:
     task.original.md                 the request before refinement (refined mode only)
     claude/  codex/                  worktrees (branches arena/<id>/<player>)
     logs/<player>.stdout.log …       runner output, exit codes
-    results/<player>.diff …          diffs, status, verification logs
+    results/<player>.diff …          diffs, status, verification logs, answers from arena ask
 ```
 
 ## Configuration
@@ -201,6 +202,7 @@ runners:
     command: gemini
     label: Gemini
     args: ["--prompt", "{{prompt}}"]   # {{prompt}} {{promptFile}} {{task}} {{cwd}} {{branch}} {{arenaId}}
+    askArgs: ["--resume", "{{sessionId}}", "--prompt", "{{prompt}}"]   # optional: enables arena ask
     env: { SOME_FLAG: "1" }
 
 verify:
@@ -221,7 +223,8 @@ would see no `node_modules`. If a setup command fails, the arena is aborted and 
 (`arena start --no-setup` or `--setup "<cmd>"` override the config for one run).
 
 If a custom runner's `args` does not reference `{{prompt}}` / `{{promptFile}}`, the prompt is piped
-to stdin.
+to stdin. The same applies to `askArgs`, which is only needed for custom runners: without it
+`arena ask` reports that the runner cannot resume its conversation.
 
 ## How runners are launched
 
@@ -245,6 +248,30 @@ runner started from inside Claude Code does not think it is nested. Claude Code 
 by repository, so a runner inside a worktree would otherwise read and write the host project's
 memory; the Claude runner therefore passes `--settings '{"autoMemoryEnabled":false}'` and sets
 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`.
+
+### Asking a finished runner (`arena ask`)
+
+The runners are one-shot processes, but their conversations survive them. `arena ask <id> <player>
+"<question>"` resumes the runner's own conversation inside its worktree, so the answer comes from the
+agent that wrote the code, with its full context, and prints it. Answers are saved under
+`results/<player>.ask-<n>.md`, recorded in the session, and included in `arena compare` so a
+reviewer sees the runner's own account next to the diff.
+
+| Runner | Resume invocation |
+|---|---|
+| Claude | `claude -p --resume <session-id> --output-format text --permission-mode dontAsk --allowedTools <read-only list> --disallowedTools Edit,Write,MultiEdit,NotebookEdit --settings '{"autoMemoryEnabled":false}'` |
+| Codex  | `codex exec resume -c sandbox_mode="read-only" -c approval_policy="never" <thread-id> -` |
+
+Asking is strictly read-only: the prompt says so, Claude is limited to inspection tools and Codex to
+the read-only sandbox, and the worktree is fingerprinted before and after. If it changed anyway,
+the answer is flagged and `arena collect --player <p>` should be re-run before trusting the earlier
+results. Use `arena ask` to understand a candidate ("which requirement does this cover?", "why does
+the test skip on Windows?"), not to request fixes: fixing is the host's job in the synthesis step.
+
+The Claude conversation id is fixed at launch (`--session-id`). Codex has no such flag, so the thread
+id is looked up after the run in `$CODEX_HOME/sessions` by worktree path and start time. Sessions
+whose worktrees were cleaned, and sessions started with a version before `arena ask` existed, cannot
+be asked. Custom runners need `askArgs` in the configuration.
 
 ## Project layout
 

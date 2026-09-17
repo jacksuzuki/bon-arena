@@ -71,6 +71,7 @@ export function renderSummary(session: Session): string {
     } else {
       lines.push(`  results       not collected (run: arena collect ${session.id})`)
     }
+    if (p.asks.length) lines.push(`  questions     ${p.asks.length} answered (arena ask)${p.asks.some((a) => a.worktreeChanged) ? "  ⚠ worktree changed since collect" : ""}`)
     lines.push(`  branch        ${p.branch}`)
     lines.push(`  worktree      ${p.worktree}`)
     lines.push("")
@@ -142,6 +143,7 @@ export function renderCompareBundle(session: Session, opts: CompareBundleOptions
         }
       }
     }
+    pushAskSections(out, p)
     out.push("### Diff", "")
     const diff = existsSync(r.git.diffPath) ? readFileSync(r.git.diffPath, "utf8") : ""
     if (!diff.trim()) {
@@ -216,6 +218,21 @@ function pushTaskSections(out: string[], session: Session): void {
     if (session.originalTask) out.push("## Original request (before refinement; not shown to the runners)", "", session.originalTask.trim(), "")
   } else {
     out.push("## Original task", "", session.task.trim(), "")
+  }
+}
+
+/** Follow-up questions answered by the runner (`arena ask`), so reviewers see the runner's own account. */
+function pushAskSections(out: string[], p: Player, maxAnswerChars = 12_000): void {
+  if (!p.asks.length) return
+  out.push(`### Questions answered by ${p.label} (arena ask)`, "")
+  for (const a of p.asks) {
+    out.push(`**Q${a.n}.** ${a.question.trim()}`, "")
+    const answer = existsSync(a.answerPath) ? readFileSync(a.answerPath, "utf8").trim() : ""
+    const status = a.timedOut ? " _(timed out)_" : a.exitCode !== 0 ? ` _(runner exited with ${a.exitCode ?? "signal"})_` : ""
+    out.push(`**A${a.n}.**${status}${a.worktreeChanged ? " _(warning: the worktree changed while answering)_" : ""}`, "")
+    if (!answer) out.push("_(no answer)_", "")
+    else if (answer.length > maxAnswerChars) out.push(answer.slice(0, maxAnswerChars), "", `_(answer truncated; full text: ${a.answerPath})_`, "")
+    else out.push(answer, "")
   }
 }
 

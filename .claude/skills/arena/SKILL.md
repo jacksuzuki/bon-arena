@@ -25,6 +25,9 @@ progress, and help the user compare and decide. Never re-implement Core logic.
 - Runners are already running with auto-approval inside their own worktrees. Do not start extra ones.
 - Runners are headless: they cannot ask questions. Whatever is unclear when they start becomes a
   guess. That is why the task is refined **before** launch (step 4), never after.
+- You can, however, ask *them* once they have finished: `arena ask <id> <player> "<question>"`
+  resumes the runner's own conversation inside its worktree, read-only, and prints the answer. Use
+  it to understand a candidate, never to have it change code: fixes are yours to make in Synthesize.
 - Session ids look like `20260917-abc123`. `latest` is accepted everywhere.
 
 ## Host requirements
@@ -203,6 +206,22 @@ that the result still serves the original request. Do not trust the runners' own
 inside the worktrees (read-only) and, when a claim matters (e.g. "installs cleanly", "works after
 X"), actually try it on a copy of the worktree in a temp dir.
 
+When something about a candidate is unclear from the code and logs alone — why a requirement was
+skipped, what a puzzling change is for, whether a failing check was known, which of two behaviours
+was intended — ask the runner itself before judging:
+
+```bash
+arena ask <id> <player> "<one specific question>"
+```
+
+It resumes that runner's conversation (Claude session / Codex thread) in its worktree with
+inspection-only permissions and prints the answer; the answer is saved and included in later
+`arena compare` output. Ask one concrete question at a time, at most a few per candidate, and
+treat the reply as the runner's account, not as verified fact. If the output warns that the
+worktree changed, re-run `arena collect <id> --player <player>`. If it reports that the conversation
+cannot be resumed (cleaned worktree, custom runner without `askArgs`, older session), fall back to
+the logs and the diff.
+
 Present a concise comparison to the user:
 
 1. a short table of facts (duration, files, diff size, verification results, approach in one line);
@@ -220,6 +239,9 @@ Only now ask with AskUserQuestion, in this order (the first option is the defaul
 - Adopt <recommended> as is
 - Adopt <other> as is
 - Inspect a diff (then return to this question)
+
+If the user wants to interrogate a candidate first ("ask Codex why…"), run `arena ask` with their
+question, relay the answer, and ask this question again.
 
 Mention that "Keep both" and "Clean arena" are also available if the user asks. If the comparison
 showed that one candidate is clearly complete and the other adds nothing worth porting, say so and
@@ -277,6 +299,7 @@ arena status|wait|stop|summary|inspect <id|latest>
 arena collect <id> [--no-verify] [--test <cmd>|false] [--lint ...] [--typecheck ...]
 arena compare <id> [--max-diff-bytes <n>]
 arena diff <id> <player>        arena logs <id> <player> [--stderr] [--tail n]
+arena ask <id> <player> "<question>" [--question-file <f>] [--timeout <sec>]   (read-only; after the runner finished)
 arena select <id> <player|none> arena commit <id> <player> [-m msg]
 arena synthesize <id> <base>    arena finish <id>        arena adopt <id> [--ff|--squash]
 arena list [--all]              arena clean <id> [--keep-branches] [--force]

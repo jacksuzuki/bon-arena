@@ -104,6 +104,7 @@ arena start --players claude,codex --task-file task.md
 arena wait latest
 arena collect latest
 arena compare latest        # 供 LLM 或人工审阅的 markdown 包
+arena ask latest codex "为什么重试上限是 2？"   # 以只读方式恢复 runner 自己的会话并提问
 arena select latest codex
 arena commit latest codex   # 把 worktree 的改动快照到候选分支
 arena adopt latest          # 把所选分支合并到当前分支 (--ff / --squash)
@@ -140,7 +141,7 @@ arena start --players claude,codex --task-file spec.md \
     task.original.md                 提炼前的需求（仅 refined 模式）
     claude/  codex/                  worktree（分支 arena/<id>/<player>）
     logs/<player>.stdout.log …       runner 输出、退出码
-    results/<player>.diff …          diff、status、验证日志
+    results/<player>.diff …          diff、status、验证日志、arena ask 的回答
 ```
 
 ## 配置
@@ -159,6 +160,7 @@ runners:
     command: gemini
     label: Gemini
     args: ["--prompt", "{{prompt}}"]   # {{prompt}} {{promptFile}} {{task}} {{cwd}} {{branch}} {{arenaId}}
+    askArgs: ["--resume", "{{sessionId}}", "--prompt", "{{prompt}}"]   # 可选：启用 arena ask
     env: { SOME_FLAG: "1" }
 
 verify:
@@ -176,7 +178,7 @@ refine: true               # 宿主的默认任务模式：true = 先提炼需�
 
 新的 worktree 只包含被跟踪的文件，因此没有 `setup` 时，runner 和验证步骤都看不到 `node_modules`。如果 setup 命令失败，arena 会中止并删除其 worktree（`arena start --no-setup` 或 `--setup "<cmd>"` 可对单次运行覆盖配置）。
 
-如果自定义 runner 的 `args` 没有引用 `{{prompt}}` / `{{promptFile}}`，提示词会通过 stdin 传入。
+如果自定义 runner 的 `args` 没有引用 `{{prompt}}` / `{{promptFile}}`，提示词会通过 stdin 传入。 `askArgs` 也一样，且只有自定义 runner 需要它；未设置时 `arena ask` 会报告该 runner 无法恢复会话。
 
 ## runner 的启动方式
 
@@ -190,6 +192,19 @@ refine: true               # 宿主的默认任务模式：true = 先提炼需�
 无交互运行无法回答权限确认，因此 Claude 以跳过权限的方式运行；隔离来自专用 worktree，而不是权限系统。每个 runner 由一个分离的 supervisor 进程监管并记录退出码，因此 `arena` 命令可以退出后再回来（`arena wait`、`arena status`）。`arena stop` 会终止整个进程组。
 
 runner 的环境中会去掉 `CLAUDECODE` / `CLAUDE_CODE_*` 变量，这样从 Claude Code 内部启动的 Claude runner 不会误以为自己是嵌套运行。Claude Code 的 auto-memory 以仓库为键，worktree 中的 runner 否则会读写宿主项目的记忆；因此 Claude runner 会传入 `--settings '{"autoMemoryEnabled":false}'` 并设置 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`。
+
+### 向已完成的 runner 提问（`arena ask`）
+
+runner 是一次性进程，但它们的会话在进程结束后仍然保留。`arena ask <id> <player> "<问题>"` 会在 worktree 内恢复 runner 自己的会话，因此回答来自写下这些代码的那个 agent，并带着它的完整上下文。回答保存在 `results/<player>.ask-<n>.md`，记录到会话中，并包含在 `arena compare` 里，审阅者可以在 diff 旁边看到 runner 自己的说明。
+
+| Runner | 恢复命令 |
+|---|---|
+| Claude | `claude -p --resume <session-id> --output-format text --permission-mode dontAsk --allowedTools <只读工具列表> --disallowedTools Edit,Write,MultiEdit,NotebookEdit --settings '{"autoMemoryEnabled":false}'` |
+| Codex  | `codex exec resume -c sandbox_mode="read-only" -c approval_policy="never" <thread-id> -` |
+
+提问是严格只读的：提示词会如此说明，Claude 被限制为只能使用查看类工具，Codex 使用只读沙箱，并且会在前后比较 worktree 的指纹。如果仍然发生了改动，回答会被标记，在信任之前的结果前应重新运行 `arena collect --player <p>`。`arena ask` 用来理解候选（"这个改动对应规格的哪一条？""为什么这个测试在 Windows 上跳过？"），而不是用来要求修复：修复由宿主在 synthesis 步骤完成。
+
+Claude 的会话 id 在启动时固定（`--session-id`）。Codex 没有这样的参数，因此在运行结束后按 worktree 路径和开始时间在 `$CODEX_HOME/sessions` 中查找 thread id。已 clean 的会话，以及在 `arena ask` 出现之前的版本启动的会话，无法提问。自定义 runner 需要在配置中提供 `askArgs`。
 
 ## 项目结构
 

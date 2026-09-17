@@ -700,6 +700,27 @@ final judge
 
 という cross-judge に拡張可能。
 
+### runner への質問（`arena ask`）
+
+runner は一回きりのプロセスだが、会話（Claude の session / Codex の thread）はプロセス終了後も残る。
+比較中に成果物の意図や欠落が読み取れないとき、ホストは `arena ask <id> <player> "<質問>"` で
+その runner 自身の会話を worktree 内で再開し、実装時の文脈を持った本人に答えさせる。
+
+```text
+Claude : 起動時に --session-id <uuid> を固定 → claude -p --resume <uuid>
+Codex  : 実行後に $CODEX_HOME/sessions の session_meta (cwd, 開始時刻) から thread id を特定
+         → codex exec resume <thread-id>
+custom : 設定の askArgs ({{sessionId}} {{prompt}} {{promptFile}} {{cwd}})
+```
+
+質問は読み取り専用。プロンプトで明示し、Claude は閲覧系ツールのみ (`--permission-mode dontAsk`
++ allow/deny list)、Codex は `sandbox_mode="read-only"` で再開する。さらに worktree の
+フィンガープリント（HEAD + 作業ツリー全体の tree hash）を前後で比較し、変化していれば回答に
+警告を付ける（collect 済みの結果が古くなるため）。回答は `results/<player>.ask-<n>.md` に保存し、
+セッションの `players[].asks[]` に記録し、`arena compare` のバンドルに含める。
+
+「直させる」（差し戻し）は意図的に含めない。修正はホストが synthesis で行う。
+
 ---
 
 ## 16. 採用

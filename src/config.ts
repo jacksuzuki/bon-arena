@@ -10,6 +10,11 @@ const RunnerConfigSchema = z.object({
   args: z.array(z.string()).optional(),
   /** Extra arguments appended to built-in runner invocations. */
   extraArgs: z.array(z.string()).optional(),
+  /**
+   * Custom runners only: argument list used by `arena ask` to resume the finished conversation with a
+   * follow-up question. "{{prompt}}" / "{{promptFile}}" / "{{cwd}}" / "{{sessionId}}" are substituted.
+   */
+  askArgs: z.array(z.string()).optional(),
   label: z.string().optional(),
   model: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),

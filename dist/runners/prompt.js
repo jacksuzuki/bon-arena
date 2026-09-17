@@ -28,3 +28,22 @@ ${taskNote}TASK:
 ${task}
 `;
 }
+/**
+ * Follow-up prompt for `arena ask`: the runner's finished conversation is resumed inside its
+ * worktree with a reviewer's question. Answering is strictly read-only; changes would invalidate
+ * the collected results.
+ */
+export function buildAskPrompt(question) {
+    return `A reviewer is comparing your implementation with another candidate and has a question about it.
+
+Answer the question below directly and concretely. Refer to specific files, functions and lines
+where that helps. If the question points at a bug, a gap or an unmet requirement, say so plainly,
+explain the cause and what a fix would involve, but do NOT apply it.
+
+This is a read-only exchange: do not create, modify or delete any file, do not run commands that
+change the working tree, do not commit, and do not switch branches. Inspect only.
+
+QUESTION:
+${question.trim()}
+`;
+}

@@ -104,6 +104,7 @@ arena start --players claude,codex --task-file task.md
 arena wait latest
 arena collect latest
 arena compare latest        # LLM や人間のレビュアー向け Markdown バンドル
+arena ask latest codex "リトライ上限が 2 なのはなぜ？"   # runner 自身の会話を読み取り専用で再開して質問
 arena select latest codex
 arena commit latest codex   # worktree の変更を候補ブランチにスナップショット
 arena adopt latest          # 選択したブランチを現在のブランチにマージ (--ff / --squash)
@@ -140,7 +141,7 @@ arena start --players claude,codex --task-file spec.md \
     task.original.md                 洗練前の依頼 (refined モードのみ)
     claude/  codex/                  worktree (ブランチ arena/<id>/<player>)
     logs/<player>.stdout.log …       runner の出力、exit code
-    results/<player>.diff …          diff、status、検証ログ
+    results/<player>.diff …          diff、status、検証ログ、arena ask の回答
 ```
 
 ## 設定
@@ -159,6 +160,7 @@ runners:
     command: gemini
     label: Gemini
     args: ["--prompt", "{{prompt}}"]   # {{prompt}} {{promptFile}} {{task}} {{cwd}} {{branch}} {{arenaId}}
+    askArgs: ["--resume", "{{sessionId}}", "--prompt", "{{prompt}}"]   # 任意: arena ask を有効にする
     env: { SOME_FLAG: "1" }
 
 verify:
@@ -176,7 +178,7 @@ refine: true               # ホストの既定タスクモード: true = 先に
 
 新しい worktree には追跡ファイルしかないため、`setup` がないと runner と検証は `node_modules` を見つけられません。setup コマンドが失敗すると arena は中断され、その worktree は削除されます（`arena start --no-setup` や `--setup "<cmd>"` で一回限り設定を上書きできます）。
 
-custom runner の `args` が `{{prompt}}` / `{{promptFile}}` を参照しない場合、プロンプトは stdin に渡されます。
+custom runner の `args` が `{{prompt}}` / `{{promptFile}}` を参照しない場合、プロンプトは stdin に渡されます。`askArgs` も同様で、custom runner にだけ必要です。未設定なら `arena ask` は「この runner は会話を再開できない」と報告します。
 
 ## runner の起動方法
 
@@ -190,6 +192,19 @@ custom runner の `args` が `{{prompt}}` / `{{promptFile}}` を参照しない�
 ヘッドレス実行では権限の確認に答えられないため、Claude は権限チェックをスキップして動きます。隔離は権限システムではなく専用の worktree によるものです。各 runner は detached な supervisor プロセスに監視され、exit code が記録されるので、`arena` コマンドは終了してあとから戻れます（`arena wait`、`arena status`）。`arena stop` はプロセスグループ全体を終了します。
 
 runner の環境からは `CLAUDECODE` / `CLAUDE_CODE_*` を取り除くので、Claude Code 内から起動した Claude runner が「入れ子」と誤認することはありません。Claude Code の auto-memory はリポジトリ単位なので、worktree 内の runner はそのままではホストプロジェクトのメモリを読み書きしてしまいます。そのため Claude runner は `--settings '{"autoMemoryEnabled":false}'` を渡し、`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` を設定します。
+
+### 終了した runner に質問する（`arena ask`）
+
+runner は一回きりのプロセスですが、会話はプロセスの終了後も残ります。`arena ask <id> <player> "<質問>"` は runner 自身の会話を worktree 内で再開するので、コードを書いた本人が、実装時の文脈を持ったまま答えます。回答は `results/<player>.ask-<n>.md` に保存され、セッションに記録され、`arena compare` にも含まれるため、レビュアーは diff の隣で runner 自身の説明を読めます。
+
+| Runner | 再開コマンド |
+|---|---|
+| Claude | `claude -p --resume <session-id> --output-format text --permission-mode dontAsk --allowedTools <読み取り専用の一覧> --disallowedTools Edit,Write,MultiEdit,NotebookEdit --settings '{"autoMemoryEnabled":false}'` |
+| Codex  | `codex exec resume -c sandbox_mode="read-only" -c approval_policy="never" <thread-id> -` |
+
+質問は厳密に読み取り専用です。プロンプトでそう指示し、Claude は閲覧系ツールに、Codex は read-only サンドボックスに制限し、さらに worktree のフィンガープリントを前後で比較します。それでも変更があった場合は回答に警告が付くので、以前の結果を信用する前に `arena collect --player <p>` をやり直してください。`arena ask` は候補を理解するためのもの（「この変更は仕様のどの項目？」「なぜこのテストは Windows でスキップ？」）で、修正を頼むためのものではありません。修正は synthesis ステップでホストが行います。
+
+Claude の会話 ID は起動時に固定します（`--session-id`）。Codex にはそのフラグがないため、実行後に `$CODEX_HOME/sessions` を worktree のパスと開始時刻で検索して thread id を特定します。worktree を clean したセッションや、`arena ask` 実装前のバージョンで開始したセッションには質問できません。custom runner には設定の `askArgs` が必要です。
 
 ## プロジェクト構成
 

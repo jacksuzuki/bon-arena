@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { commandExists } from "./available.js";
 /**
@@ -34,5 +36,99 @@ export function createCodexRunner(config = {}) {
             args.push("-"); // read the prompt from stdin
             return { command, args, promptViaStdin: true, env: config.env };
         },
+        findSessionId(lookup) {
+            // `codex exec` has no way to pin a thread id, but it records every thread under
+            // $CODEX_HOME/sessions with the working directory it ran in.
+            return findCodexThread(codexSessionsDir(config.env), lookup.cwd, Date.parse(lookup.startedAt));
+        },
+        askInvocation(input) {
+            // `codex exec resume` has no --sandbox / -C flags; the sandbox comes from config overrides and
+            // the working directory from the process cwd (the core spawns it inside the worktree).
+            const args = [
+                "exec",
+                "resume",
+                "-c",
+                "sandbox_mode=\"read-only\"",
+                "-c",
+                "approval_policy=\"never\"",
+            ];
+            if (config.model)
+                args.push("--model", config.model);
+            args.push(input.sessionId, "-"); // the answer is the final message on stdout
+            return { command, args, promptViaStdin: true, env: config.env };
+        },
     };
+}
+export function codexSessionsDir(env = undefined) {
+    const home = env?.CODEX_HOME ?? process.env.CODEX_HOME ?? join(homedir(), ".codex");
+    return join(home, "sessions");
+}
+/**
+ * Find the newest Codex thread whose `session_meta` names `cwd` and that started at or after
+ * `startedAtMs` (with a minute of slack for clock skew between the launch and Codex's own stamp).
+ */
+export function findCodexThread(sessionsDir, cwd, startedAtMs) {
+    if (!existsSync(sessionsDir))
+        return null;
+    const slackMs = 60_000;
+    let best = null;
+    for (const file of walkRollouts(sessionsDir)) {
+        const meta = readSessionMeta(file);
+        if (!meta || meta.cwd !== cwd)
+            continue;
+        if (Number.isFinite(startedAtMs) && meta.at < startedAtMs - slackMs)
+            continue;
+        if (!best || meta.at > best.at)
+            best = { id: meta.id, at: meta.at };
+    }
+    return best?.id ?? null;
+}
+function* walkRollouts(dir) {
+    let entries;
+    try {
+        entries = readdirSync(dir);
+    }
+    catch {
+        return;
+    }
+    for (const name of entries) {
+        const path = join(dir, name);
+        let isDir = false;
+        try {
+            isDir = statSync(path).isDirectory();
+        }
+        catch {
+            continue;
+        }
+        if (isDir)
+            yield* walkRollouts(path);
+        else if (name.startsWith("rollout-") && name.endsWith(".jsonl"))
+            yield path;
+    }
+}
+/** Read only the first line (the `session_meta` record) of a rollout file; they can be large. */
+function readSessionMeta(file) {
+    let fd = null;
+    try {
+        fd = openSync(file, "r");
+        const buf = Buffer.alloc(64 * 1024);
+        const n = readSync(fd, buf, 0, buf.length, 0);
+        const firstLine = buf.toString("utf8", 0, n).split("\n")[0] ?? "";
+        const record = JSON.parse(firstLine);
+        if (record.type !== "session_meta" || !record.payload)
+            return null;
+        const id = record.payload.id ?? record.payload.session_id;
+        const cwd = record.payload.cwd;
+        if (!id || !cwd)
+            return null;
+        const at = Date.parse(record.payload.timestamp ?? record.timestamp ?? "");
+        return { id, cwd, at: Number.isFinite(at) ? at : 0 };
+    }
+    catch {
+        return null;
+    }
+    finally {
+        if (fd !== null)
+            closeSync(fd);
+    }
 }

@@ -2,16 +2,17 @@
  * Arena Core: isolate / run / collect / compare.
  * Harness-independent. Every function here is usable from any host (Claude Code skill, CLI, ...).
  */
-import { mkdirSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
 import { collectDiff } from "./git/diff.js";
 import { inspectRepository, gitTry, git } from "./git/repository.js";
 import { createWorktree, deleteBranch, removeWorktree } from "./git/worktree.js";
 import { arenaDir } from "./paths.js";
-import { isProcessAlive, killProcessGroup, readExitCode, spawnDetached } from "./process/spawn.js";
+import { isProcessAlive, killProcessGroup, readExitCode, runForeground, spawnDetached } from "./process/spawn.js";
 import { createRunnerRegistry, resolveRunner } from "./runners/index.js";
-import { buildArenaPrompt } from "./runners/prompt.js";
+import { buildArenaPrompt, buildAskPrompt } from "./runners/prompt.js";
 import { findPlayer, loadSession, newArenaId, saveSession } from "./session.js";
 import { resolveSetupCommands, resolveVerifyCommands } from "./verification/detect.js";
 import { runAllVerifications, runVerification, DEFAULT_VERIFY_TIMEOUT_MS } from "./verification/run.js";
@@ -106,6 +107,7 @@ export async function startArena(opts) {
             stdoutPath: join(logsDir, `${playerId}.stdout.log`),
             stderrPath: join(logsDir, `${playerId}.stderr.log`),
             exitCodePath: join(logsDir, `${playerId}.exit`),
+            asks: [],
         });
     }
     saveSession(session);
@@ -177,6 +179,7 @@ export async function startArena(opts) {
         player.status = "running";
         player.startedAt = new Date().toISOString();
         player.command = [invocation.command, ...invocation.args].join(" ");
+        player.runnerSession = invocation.sessionId;
         log(`started ${player.label} (pid ${pid})`);
     }
     session.status = "running";
@@ -299,6 +302,119 @@ export async function collectResults(id, opts = {}) {
     }
     saveSession(session);
     return session;
+}
+export const DEFAULT_ASK_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * Put a read-only follow-up question to a finished runner by resuming its own conversation inside
+ * its worktree. The runner keeps the context of its implementation; the core keeps the answer.
+ * The worktree is fingerprinted before and after so an answer that (against instructions) changed
+ * files is flagged: results collected earlier would then be stale.
+ */
+export async function askPlayer(id, playerRef, question, opts = {}) {
+    const log = opts.log ?? (() => { });
+    if (!question.trim())
+        throw new Error("Question must not be empty");
+    const session = refreshSession(id);
+    const player = findPlayer(session, playerRef);
+    if (player.status === "running" || player.status === "pending") {
+        throw new Error(`${player.label} is still ${player.status}; wait for it to finish before asking (arena wait ${session.id})`);
+    }
+    if (!existsSync(player.worktree))
+        throw new Error(`Worktree missing for ${player.id}: ${player.worktree} (a cleaned arena cannot be asked)`);
+    const config = loadConfig(session.repository);
+    const runner = resolveRunner(createRunnerRegistry(config), player.runner);
+    if (!runner.askInvocation) {
+        throw new Error(`Runner "${runner.id}" cannot resume its conversation. Built-in runners support arena ask; custom runners need "askArgs" in .arena.yaml.`);
+    }
+    const resultsDir = join(session.arenaDir, "results");
+    const logsDir = join(session.arenaDir, "logs");
+    mkdirSync(resultsDir, { recursive: true });
+    mkdirSync(logsDir, { recursive: true });
+    // The conversation id was either fixed at launch (Claude) or has to be looked up now (Codex).
+    if (!player.runnerSession && runner.findSessionId) {
+        const found = runner.findSessionId({
+            cwd: player.worktree,
+            startedAt: player.startedAt ?? session.startedAt,
+            stdoutPath: player.stdoutPath,
+            stderrPath: player.stderrPath,
+            resultsDir,
+        });
+        if (found) {
+            player.runnerSession = found;
+            saveSession(session);
+            log(`found ${player.label} conversation ${found}`);
+        }
+    }
+    if (!player.runnerSession && (runner.findSessionId || runner.id === "claude")) {
+        throw new Error(`No conversation id known for ${player.label}. The runner's session store has no thread for ${player.worktree}` +
+            ` (sessions started before arena ask existed cannot be resumed).`);
+    }
+    const n = player.asks.length + 1;
+    const prompt = buildAskPrompt(question);
+    const promptPath = join(session.arenaDir, `${player.id}.ask-${n}.prompt.md`);
+    const answerPath = join(resultsDir, `${player.id}.ask-${n}.md`);
+    const stderrPath = join(logsDir, `${player.id}.ask-${n}.stderr.log`);
+    writeFileSync(promptPath, prompt);
+    const invocation = runner.askInvocation({ sessionId: player.runnerSession ?? "", prompt, promptPath, cwd: player.worktree, resultsDir });
+    const scratchIndex = join(logsDir, `${player.id}.ask.index`);
+    const before = worktreeFingerprint(player.worktree, scratchIndex);
+    const askedAt = new Date().toISOString();
+    log(`asking ${player.label}: ${invocation.command} ${invocation.args.join(" ")}`);
+    const r = await runForeground({
+        command: invocation.command,
+        args: invocation.args,
+        cwd: player.worktree,
+        env: { ...(invocation.env ?? {}), ARENA_ID: session.id, ARENA_PLAYER: player.id, ARENA_WORKTREE: player.worktree },
+        promptPath,
+        promptViaStdin: invocation.promptViaStdin,
+        stdoutPath: answerPath,
+        stderrPath,
+        timeoutMs: opts.timeoutMs ?? DEFAULT_ASK_TIMEOUT_MS,
+    });
+    const worktreeChanged = worktreeFingerprint(player.worktree, scratchIndex) !== before;
+    const ask = {
+        n,
+        question: question.trim(),
+        askedAt,
+        durationMs: r.durationMs,
+        exitCode: r.exitCode,
+        promptPath,
+        answerPath,
+        stderrPath,
+        timedOut: r.timedOut,
+        worktreeChanged,
+    };
+    // Re-read before recording: another `arena ask` (or a collect) may have saved the session meanwhile.
+    const latest = refreshSession(id);
+    const target = findPlayer(latest, player.id);
+    target.runnerSession = target.runnerSession ?? player.runnerSession;
+    target.asks.push(ask);
+    saveSession(latest);
+    const answer = existsSync(answerPath) ? readFileSync(answerPath, "utf8") : "";
+    return { session: latest, player: target, ask, answer };
+}
+/**
+ * Content fingerprint of a worktree: HEAD plus a tree object built from the full working tree
+ * (tracked, modified and untracked files alike) through a scratch index, so the real index and the
+ * runner's own state stay untouched.
+ */
+function worktreeFingerprint(worktree, scratchIndex) {
+    const env = { ...process.env, GIT_INDEX_FILE: scratchIndex };
+    try {
+        const head = git(worktree, ["rev-parse", "HEAD"]).trim();
+        git(worktree, ["read-tree", "HEAD"], { env });
+        git(worktree, ["add", "--all", "--force"], { env });
+        const tree = git(worktree, ["write-tree"], { env }).trim();
+        return `${head}:${tree}`;
+    }
+    catch {
+        // Fall back to a coarse status-based fingerprint (e.g. an unborn HEAD).
+        const parts = [gitTry(worktree, ["status", "--porcelain", "--untracked-files=all"]).stdout, gitTry(worktree, ["diff", "HEAD"]).stdout];
+        return createHash("sha1").update(parts.join("\u0000")).digest("hex");
+    }
+    finally {
+        rmSync(scratchIndex, { force: true });
+    }
 }
 export function selectCandidate(id, playerRef) {
     const session = refreshSession(id);
