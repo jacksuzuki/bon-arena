@@ -1,6 +1,6 @@
 {
   "name": "bon-arena",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Run multiple coding agents (Claude Code, Codex CLI, ...) on the same task in isolated git worktrees and compare the results.",
   "type": "module",
   "license": "MIT",
@@ -20,8 +20,8 @@
     "dist",
     ".claude/skills",
     "README.md",
-    "README.ja.md",
-    "README.zh-CN.md",
+    "docs/README.ja.md",
+    "docs/README.zh-CN.md",
     "LICENSE"
   ],
   "engines": {

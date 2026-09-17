@@ -1,6 +1,6 @@
 # bon-arena
 
-**English** | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+**English** | [日本語](docs/README.ja.md) | [简体中文](docs/README.zh-CN.md)
 
 Run two coding agents on the **same task** in **separate git worktrees**, then compare what they
 produced: diff stats, tests, lint, typecheck — and pick the one you want.
@@ -57,7 +57,7 @@ missing, but the global install is faster and lets you use `/arena` without any 
 The compiled CLI (`dist/`) is committed, so the repository installs without a build step:
 `npm install -g --install-links github:jacksuzuki/bon-arena` (the flag matters: without it npm 10
 installs a git package as a symlink to a temporary clone that it deletes right away) or
-`npx --package github:jacksuzuki/bon-arena arena doctor`. Pin a version with `#v0.3.0`. For
+`npx --package github:jacksuzuki/bon-arena arena doctor`. Pin a version with `#v0.3.1`. For
 development:
 
 ```bash

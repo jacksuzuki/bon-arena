@@ -1,6 +1,6 @@
 # bon-arena
 
-[English](README.md) | **日本語** | [简体中文](README.zh-CN.md)
+[English](../README.md) | **日本語** | [简体中文](README.zh-CN.md)
 
 2つのコーディングエージェントに**同じタスク**を**別々の git worktree** で実装させ、成果物（diff の統計、テスト、lint、typecheck）を比較して、採用するものを選べるツールです。
 
@@ -46,7 +46,7 @@ Claude Code の skill は PATH 上の `arena` を呼び、無ければ `npx bon-
 
 ### GitHub や checkout から使う
 
-コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/bon-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/bon-arena arena doctor` です。`#v0.3.0` でバージョンを固定できます。開発用:
+コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/bon-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/bon-arena arena doctor` です。`#v0.3.1` でバージョンを固定できます。開発用:
 
 ```bash
 git clone https://github.com/jacksuzuki/bon-arena.git
