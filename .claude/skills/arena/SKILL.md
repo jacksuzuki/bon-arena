@@ -1,7 +1,7 @@
 ---
 name: arena
 description: Run an implementation arena - two coding agents (Claude Code, Codex CLI, or custom runners) implement the same task in separate git worktrees, then compare diffs, tests, lint and typecheck results and let the user pick. By default the request is first refined with the user into a one-shot specification ("simple" skips that). Use when the user types /arena, wants to "compare Claude vs Codex", "race agents", or "try two implementations".
-argument-hint: "[task text | simple <task> | refine <task> | status | list | resume <id> | compare <id> | clean <id>]"
+argument-hint: "[task <text> | task --simple <text> | task-simple <text> | status | list | resume <id> | compare <id> | clean <id>]"
 ---
 
 # Arena
@@ -31,19 +31,22 @@ progress, and help the user compare and decide. Never re-implement Core logic.
 
 | `$ARGUMENTS` starts with | Do |
 |---|---|
-| (empty) or task text | New arena (flow below) in the default task mode (refined unless `.arena.yaml` sets `refine: false`). Use the text as the task if it is clearly a task. |
-| `simple <task>` or `--simple <task>` | New arena in **simple mode**: skip step 4 and pass the task verbatim. |
-| `refine <task>` or `--refine <task>` | New arena in **refined mode** even when the config default is simple. |
-| `-- <task>` | Literal task text: everything after `--` is the task even if it starts with a keyword above (e.g. `/arena -- simple retry logic for the client`). |
+| `task <text>` or plain task text | New arena (flow below) in the default task mode (refined unless `.arena.yaml` sets `refine: false`). |
+| `task --simple <text>`, `task-simple <text>`, `simple <text>`, `--simple <text>` | New arena in **simple mode**: skip step 4 and pass the text verbatim. |
+| `task --refine <text>`, `refine <text>`, `--refine <text>` | New arena in **refined mode** even when the config default is simple. |
+| (empty) | New arena; ask for the mode together with the players (step 2), then the task. |
+| `-- <text>` | Literal task text: everything after `--` is the task even if it starts with a keyword above (e.g. `/arena -- simple retry logic for the client`). |
 | `status [id]` | `arena status <id|latest>` and report. |
 | `list` | `arena list` and report. |
 | `resume <id>` / `wait <id>` | Continue from step 6 with that id. |
 | `compare <id>` | Jump to step 8 (compare, then "What next?"). |
 | `clean <id>` | Confirm, then `arena clean <id>`. |
 
-Mode keywords are recognised only as the leading token; a `simple` or `refine` inside the task text
-is just text. Modes apply to new arenas only: status, resume, compare and clean never refine or
-relaunch an existing session's task. `simple` / `refine` are host options, never passed to the CLI.
+Mode keywords are recognised only as the leading token (or as the first flag right after `task`);
+a `simple` or `refine` later in the text is just text. The mode is fixed before any work starts: it
+is never offered again at the confirmation step. Modes apply to new arenas only: status, resume,
+compare and clean never refine or relaunch an existing session's task. `simple` / `refine` are host
+options, never passed to the CLI.
 
 ## New arena flow
 
@@ -63,6 +66,10 @@ Ask with AskUserQuestion, two questions in one call, options taken from availabl
 
 - "Player 1?" default Claude
 - "Player 2?" default Codex
+- "Task mode?" — only when `$ARGUMENTS` did not fix the mode: **Refine first (Recommended)** (you
+  read the code, ask what is unclear, and write a one-shot specification before launching) /
+  **Simple** (pass the request to the runners verbatim). Skip this question when the mode came
+  from the arguments or the user has stated it.
 
 If a chosen runner is unavailable, say which command is missing and ask again.
 
@@ -114,8 +121,8 @@ create worktrees, run setup or launch runners until the user confirms in step 4.
    dropping one — ask.
 7. **Confirm.** Show the full specification and ask with AskUserQuestion: "Launch with this
    specification?" with options **Launch** / **Edit** (take the user's changes and show it again) /
-   **Use the original request as is** (switch to simple mode: send the original request, never a
-   half-refined draft) / **Cancel** (end without creating a session). If the user already told you
+   **Cancel** (end without creating a session). Do not offer a switch to simple mode here: the mode
+   was chosen up front, and a half-refined draft must never be sent. If the user already told you
    to launch as soon as the specification is ready, do not ask again.
 
 Scale the effort to the task: a one-line bug fix with an obvious location needs a short

@@ -157,7 +157,7 @@ export function renderRefineBrief(ctx: RefineContext): string {
   out.push("3. Settle what you can — from the code, the project's conventions, and sensible defaults. Record each such decision.")
   out.push("4. Ask the user only what remains — batch the questions (a few per round, each with concrete options and a recommended default), at most two rounds. If the user defers (\"you decide\", \"お任せ\"), choose and record the choice. If nothing is unclear, skip the questions and say so.")
   out.push("5. Write the specification with the template below — integrate the answers, no Q&A transcript, keep the user's language and exact identifiers, omit empty sections, and make it self-contained (runners cannot see this conversation). Be concrete about what must be true; leave how open so the runners can take different approaches. Never invent requirements or silently drop a conflicting one. Scale the detail to the task.")
-  out.push("6. Confirm — show the specification and let the user choose: launch with it, edit it, send the original request as is (simple mode; never a half-refined draft), or cancel.")
+  out.push("6. Confirm — show the specification and let the user choose: launch with it, edit it, or cancel. Simple mode is chosen up front (e.g. `task --simple`), never at this step, and a half-refined draft is never sent.")
   out.push("7. Launch — the original request is recorded alongside the specification:")
   out.push("")
   out.push("```bash")

@@ -83,16 +83,19 @@ launched in isolated worktrees with that specification. The runners are headless
 questions, so this is the step that keeps them from guessing differently. Your original request is
 stored with the session and shown next to the specification in `arena compare`.
 
-Skip the refinement with **simple mode**, which passes your text to the runners verbatim:
+Skip the refinement with **simple mode**, chosen up front on the command line, which passes your
+text to the runners verbatim:
 
 ```
-/arena simple Rename the `Session` type to `ArenaSession`
+/arena task --simple Rename the `Session` type to `ArenaSession`
+/arena task-simple Rename the `Session` type to `ArenaSession`      # same thing
 ```
 
-`/arena refine <task>` forces refinement, `refine: false` in `.arena.yaml` makes simple mode the
-default for a repository, and `/arena -- <task>` sends text that happens to start with a keyword.
-During refinement nothing is launched; you can still edit the specification, fall back to the
-original request, or cancel before any worktree exists.
+`/arena task <text>` (or plain text) refines by default; `/arena` with no arguments asks for the
+mode along with the players. `refine: false` in `.arena.yaml` makes simple mode the default for a
+repository, `task --refine` forces refinement, and `/arena -- <text>` sends text that happens to
+start with a keyword. During refinement nothing is launched; you can edit the specification or
+cancel before any worktree exists. The mode is not offered again at the confirmation step.
 
 After the runners finish, Claude Code waits, runs verification, shows a summary and **always
 presents a comparison first**: facts, per-criterion judgement, the recommended base and what the
