@@ -89,8 +89,10 @@ Skip the refinement with **simple mode**, which passes your text to the runners 
 /arena simple Rename the `Session` type to `ArenaSession`
 ```
 
-`/arena refine <task>` forces refinement, and `refine: false` in `.arena.yaml` makes simple mode the
-default for a repository.
+`/arena refine <task>` forces refinement, `refine: false` in `.arena.yaml` makes simple mode the
+default for a repository, and `/arena -- <task>` sends text that happens to start with a keyword.
+During refinement nothing is launched; you can still edit the specification, fall back to the
+original request, or cancel before any worktree exists.
 
 After the runners finish, Claude Code waits, runs verification and shows a summary. The recommended
 next step is **Synthesize**: Claude Code compares the candidates, takes the stronger one as the base,

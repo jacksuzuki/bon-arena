@@ -145,7 +145,11 @@ runner はヘッドレスで質問できないため、曖昧な点はすべて 
 3. コードや慣習から決められるものは host が決める
 4. 残りだけをユーザーに聞く（選択肢と推奨値付き、まとめて、最大 2 ラウンド）
 5. 仕様（Goal / Background / Scope / Requirements / Acceptance criteria / Constraints / Verification / Decisions）を書く
-6. ユーザーが承認してから起動する
+   - 「何が満たされるべきか」は具体的に、「どう実装するか」は runner に委ねる（比較の余地を残す）
+   - runner は HEAD から始まるため、未コミットの変更を前提にしない
+   - 空のセクションは省き、詳細度はタスクの規模に合わせる
+6. ユーザーが承認してから起動する（承認前に worktree 作成・setup・runner 起動をしない。
+   修正・元の依頼のまま送る・キャンセルも選べる）
 
 ```text
 Task?

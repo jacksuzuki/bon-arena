@@ -34,11 +34,16 @@ progress, and help the user compare and decide. Never re-implement Core logic.
 | (empty) or task text | New arena (flow below) in the default task mode (refined unless `.arena.yaml` sets `refine: false`). Use the text as the task if it is clearly a task. |
 | `simple <task>` or `--simple <task>` | New arena in **simple mode**: skip step 4 and pass the task verbatim. |
 | `refine <task>` or `--refine <task>` | New arena in **refined mode** even when the config default is simple. |
+| `-- <task>` | Literal task text: everything after `--` is the task even if it starts with a keyword above (e.g. `/arena -- simple retry logic for the client`). |
 | `status [id]` | `arena status <id|latest>` and report. |
 | `list` | `arena list` and report. |
 | `resume <id>` / `wait <id>` | Continue from step 6 with that id. |
 | `compare <id>` | Jump to the Compare step. |
 | `clean <id>` | Confirm, then `arena clean <id>`. |
+
+Mode keywords are recognised only as the leading token; a `simple` or `refine` inside the task text
+is just text. Modes apply to new arenas only: status, resume, compare and clean never refine or
+relaunch an existing session's task. `simple` / `refine` are host options, never passed to the CLI.
 
 ## New arena flow
 
@@ -72,8 +77,9 @@ and is recorded as such. Then:
 
 ### 4. Refine (skipped in simple mode)
 
-Goal: turn the request into a specification that two independent, headless runners would implement
-the same way in one pass. You clarify; you do **not** implement anything here.
+Goal: turn the request into a specification that two independent, headless runners could implement
+in one pass without guessing. You clarify; you do **not** implement anything here, and you do not
+create worktrees, run setup or launch runners until the user confirms in step 4.7.
 
 1. Run `arena refine` with the original request. It saves the request as a draft file (path in the
    output), prints repository facts and the specification template, and is the procedure to follow:
@@ -86,7 +92,9 @@ the same way in one pass. You clarify; you do **not** implement anything here.
 
 2. **Understand.** Restate the request in one sentence. Read the code it touches (read-only, in the
    user's checkout): entry points, the modules to change, existing tests, naming and error-handling
-   conventions. Use subagents for broad searches if the repo is large.
+   conventions. Use subagents for broad searches if the repo is large. Candidates start from the
+   preflight HEAD: if a relevant file is dirty or untracked, look at the committed version
+   (`git show HEAD:<path>`) and do not base the specification on changes the runners will not get.
 3. **Find the gaps.** List every decision a runner would otherwise have to guess: scope boundaries,
    affected files/modules, behavior in edge cases, public API and naming, backward compatibility,
    user-facing text, expected tests, what must not change.
@@ -96,15 +104,22 @@ the same way in one pass. You clarify; you do **not** implement anything here.
    concrete options and a recommended default; at most two rounds. If the user defers ("you decide",
    "お任せ"), choose and record the choice. If nothing is genuinely unclear, ask nothing and say so.
 6. **Write the specification** using the template `arena refine` printed (Goal, Background, Scope
-   in/out, Requirements, Acceptance criteria, Constraints, Verification, Decisions). Integrate the
-   answers; no Q&A transcript. Keep the user's language. Be concrete: name files, functions,
-   commands, messages. Include the verification commands from `arena doctor`.
+   in/out, Requirements, Acceptance criteria, Constraints, Verification, Decisions); omit sections
+   that would be empty. Integrate the answers; no Q&A transcript. Keep the user's language and the
+   user's exact identifiers and examples. Be concrete about *what*: name files, functions, commands,
+   messages, edge cases, and include the verification commands from `arena doctor`. Do not
+   over-prescribe *how*: the point of an arena is that two runners may solve it differently, so leave
+   design and implementation choices open unless the user or the codebase fixes them. Never invent
+   requirements the user did not ask for, and never resolve conflicting requirements by silently
+   dropping one — ask.
 7. **Confirm.** Show the full specification and ask with AskUserQuestion: "Launch with this
    specification?" with options **Launch** / **Edit** (take the user's changes and show it again) /
-   **Use the original request as is** (switch to simple mode).
+   **Use the original request as is** (switch to simple mode: send the original request, never a
+   half-refined draft) / **Cancel** (end without creating a session). If the user already told you
+   to launch as soon as the specification is ready, do not ask again.
 
-Never spend more time here than the task deserves: a one-line bug fix with an obvious location
-needs a short specification and no questions.
+Scale the effort to the task: a one-line bug fix with an obvious location needs a short
+specification and no questions; a feature that touches several modules deserves the full template.
 
 ### 5. Launch
 
@@ -127,8 +142,11 @@ arena start --players <p1>,<p2> --json <<'ARENA_TASK'
 ARENA_TASK
 ```
 
-Runners receive only the task text you pass here (plus the shared arena rules). In refined mode
-the original request is stored with the session for reviewers and shown in `arena compare`.
+Runners receive only the task text you pass here (plus the shared arena rules), so the text must be
+self-contained: never refer to "the discussion above". Always pass it via stdin heredoc or
+`--task-file`, never by interpolating it into a shell string; pick a heredoc delimiter that does not
+occur as a line of the task. In refined mode the original request is stored with the session for
+reviewers and shown in `arena compare`.
 Report the session id, branches and worktree paths from the JSON. If `start` fails with
 "setup failed", show the setup log it names and offer `--no-setup` or a `.arena.yaml` `setup` entry.
 

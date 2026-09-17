@@ -148,16 +148,16 @@ export function renderRefineBrief(ctx: RefineContext): string {
   out.push("")
   out.push("## Why", "")
   out.push(
-    "Runners work headless and cannot ask anything. Every gap in the request becomes a guess, and two runners guess differently, which makes the candidates hard to compare. Close the gaps now: runners receive only the specification you write; the original request is stored with the session for reviewers.",
+    "Runners work headless and cannot ask anything. Every gap in the request becomes a guess, and two runners guess differently, which makes the candidates hard to compare. Close the gaps now: runners receive only the specification you write; the original request is stored with the session for reviewers. Until the user confirms the specification, do not create worktrees, run setup, launch runners, or implement anything.",
     "",
   )
   out.push("## Procedure", "")
-  out.push("1. Understand — restate the request in one sentence. Read the code it touches (read-only): entry points, the modules to change, existing tests, naming and error-handling conventions.")
+  out.push("1. Understand — restate the request in one sentence. Read the code it touches (read-only): entry points, the modules to change, existing tests, naming and error-handling conventions. Candidates start from HEAD: for dirty or untracked files look at the committed version (git show HEAD:<path>) and do not rely on changes the runners will not receive.")
   out.push("2. Find the gaps — list every decision a runner would otherwise have to guess: scope boundaries, files and modules affected, behavior in edge cases, public API and naming, backward compatibility, user-facing text, which tests are expected, what must not change.")
   out.push("3. Settle what you can — from the code, the project's conventions, and sensible defaults. Record each such decision.")
   out.push("4. Ask the user only what remains — batch the questions (a few per round, each with concrete options and a recommended default), at most two rounds. If the user defers (\"you decide\", \"お任せ\"), choose and record the choice. If nothing is unclear, skip the questions and say so.")
-  out.push("5. Write the specification with the template below — integrate the answers, no Q&A transcript, keep the user's language, make it self-contained and concrete enough that two independent runners would build the same thing in one pass. Do not implement anything yourself.")
-  out.push("6. Confirm — show the specification and let the user choose: launch with it, edit it, or send the original request as is (simple mode).")
+  out.push("5. Write the specification with the template below — integrate the answers, no Q&A transcript, keep the user's language and exact identifiers, omit empty sections, and make it self-contained (runners cannot see this conversation). Be concrete about what must be true; leave how open so the runners can take different approaches. Never invent requirements or silently drop a conflicting one. Scale the detail to the task.")
+  out.push("6. Confirm — show the specification and let the user choose: launch with it, edit it, send the original request as is (simple mode; never a half-refined draft), or cancel.")
   out.push("7. Launch — the original request is recorded alongside the specification:")
   out.push("")
   out.push("```bash")
