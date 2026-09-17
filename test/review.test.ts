@@ -34,7 +34,15 @@ function fixture(t: TestContext, runners: string): { repo: string; cleanup: (fn:
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "arena-review-")))
   const cleanups: Array<() => void> = []
   const previous = process.env.ARENA_HOME
+  // No git identity anywhere (as on CI): arena's commits must still work.
+  const previousGitConfig = { global: process.env.GIT_CONFIG_GLOBAL, system: process.env.GIT_CONFIG_SYSTEM }
+  process.env.GIT_CONFIG_GLOBAL = "/dev/null"
+  process.env.GIT_CONFIG_SYSTEM = "/dev/null"
   t.after(() => {
+    for (const [key, value] of [["GIT_CONFIG_GLOBAL", previousGitConfig.global], ["GIT_CONFIG_SYSTEM", previousGitConfig.system]] as const) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
     for (const fn of cleanups.reverse()) {
       try {
         fn()
@@ -89,8 +97,10 @@ test("reviewFinal has every runner review the synthesized final version in paral
 
   await assert.rejects(reviewFinal(session.id), /No candidate selected/)
 
-  // Host finishes on alpha: synthesis snapshot, then an edit that stays uncommitted (the review must see it).
+  // Host finishes on alpha: synthesis snapshot (with no git identity configured, as on CI), then an
+  // edit that stays uncommitted (the review must see it).
   const { base } = startSynthesis(session.id, "alpha")
+  assert.equal(execFileSync("git", ["-C", base.worktree, "log", "-1", "--format=%an <%ae>"], { encoding: "utf8" }).trim(), "Arena <arena@localhost>")
   writeFileSync(join(base.worktree, "impl.txt"), "implemented by alpha\nhost touch\n")
 
   const r = await reviewFinal(session.id, { instructions: "Focus on impl.txt." })

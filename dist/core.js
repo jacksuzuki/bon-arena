@@ -545,6 +545,17 @@ export function selectCandidate(id, playerRef) {
     saveSession(session);
     return session;
 }
+/**
+ * `-c` options giving git an author when none is configured (headless hosts, CI). The user's own
+ * identity is used whenever it exists; the placeholder never leaks a real address.
+ */
+function commitIdentity(worktree) {
+    const name = gitTry(worktree, ["config", "user.name"]).stdout.trim();
+    const email = gitTry(worktree, ["config", "user.email"]).stdout.trim();
+    if (name && email)
+        return [];
+    return ["-c", `user.name=${name || "Arena"}`, "-c", `user.email=${email || "arena@localhost"}`];
+}
 /** Commit whatever is in the candidate worktree onto its branch so the branch is self-contained. */
 export function commitCandidate(id, playerRef, message) {
     const session = refreshSession(id);
@@ -556,7 +567,7 @@ export function commitCandidate(id, playerRef, message) {
     if (staged.exitCode === 0) {
         return { player, committed: false, commit: gitTry(player.worktree, ["rev-parse", "HEAD"]).stdout.trim() || null };
     }
-    git(player.worktree, ["commit", "--quiet", "--no-verify", "-m", message ?? `arena(${session.id}): ${player.label} candidate\n\nTask: ${session.task.split("\n")[0]}`]);
+    git(player.worktree, [...commitIdentity(player.worktree), "commit", "--quiet", "--no-verify", "-m", message ?? `arena(${session.id}): ${player.label} candidate\n\nTask: ${session.task.split("\n")[0]}`]);
     return { player, committed: true, commit: git(player.worktree, ["rev-parse", "HEAD"]).trim() };
 }
 /**
