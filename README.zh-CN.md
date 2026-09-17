@@ -25,42 +25,39 @@ Arena Core 是一个小巧、与宿主无关的 CLI。Claude Code 的 `/arena` s
 
 ## 安装
 
-克隆 [jacksuzuki/ccc-arena](https://github.com/jacksuzuki/ccc-arena) 并从源码安装（需要 Node.js >= 22.18 和 npm）：
+一条命令，无需 checkout（需要 Node.js >= 22.18 和 npm）：
 
 ```bash
-git clone https://github.com/jacksuzuki/ccc-arena.git
-cd ccc-arena
-npm ci              # 安装依赖，并通过 prepare 构建 dist/
-npm link            # 把这个 checkout 暴露为 arena 命令
+npm install -g github:jacksuzuki/ccc-arena
 arena install-skill
 arena doctor         # 在你要工作的项目中运行
 ```
 
-使用 `npm link` 期间请保留该 checkout。拉取更新后，重新运行 `npm ci`，并用 `arena install-skill --force` 更新已安装的 skill。
+编译后的 CLI（`dist/`）已提交到仓库，因此安装不需要构建步骤，也不需要 devDependencies。可用 `#v0.1.0` 或 `#<commit>` 固定版本。更新时再次运行同一命令，然后执行 `arena install-skill --force`。卸载请运行 `npm uninstall -g ccc-arena`，如不再需要，可从 Claude Code 配置目录中删除 `skills/arena`。卸载包不会删除 arena 的会话和候选 worktree。如果安装后找不到 `arena`，请把 npm 的全局 bin 目录加入 PATH（macOS/Linux 为 `$(npm prefix -g)/bin`，Windows 为 `npm prefix -g`）。
 
-### 不使用 checkout 安装
-
-该包尚未发布到 npm。如果维护者提供了 `.tgz` 归档（例如通过 [GitHub Releases](https://github.com/jacksuzuki/ccc-arena/releases)），可以全局安装：
+### 免安装使用（npx）
 
 ```bash
-npm install -g ./ccc-arena-0.1.0.tgz
+npx --package github:jacksuzuki/ccc-arena arena doctor
+npx --package github:jacksuzuki/ccc-arena arena run --players claude,codex --task "为 API 添加限流"
+```
+
+首次运行会克隆并缓存该包。Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到这种 npx 形式，但全局安装更快，并且可以不经确认直接使用 `/arena`。
+
+### 从 checkout 使用（开发）
+
+```bash
+git clone https://github.com/jacksuzuki/ccc-arena.git
+cd ccc-arena
+npm ci
+npm run build        # dist/ 已提交；修改 src/ 后需重新构建
+npm link             # 把这个 checkout 暴露为 arena 命令
 arena install-skill
 ```
 
-归档提供 `arena` 命令，无需 checkout，也无需本地 TypeScript 构建。直接从 GitHub 安装（`npm install -g github:jacksuzuki/ccc-arena`）**不可用**：npm 会在没有 devDependencies 的情况下运行 `prepare` 构建，导致找不到 `tsc`。请使用克隆或归档。运行 arena 时仍然需要 git，因为候选实现使用 git worktree。如果安装后找不到 `arena`，请把 npm 的全局 bin 目录加入 PATH（macOS/Linux 为 `$(npm prefix -g)/bin`，Windows 为 `npm prefix -g`）。
+`npm pack`（或 GitHub Release）生成的 `.tgz` 也可以用 `npm install -g ./ccc-arena-<version>.tgz` 安装。发布到 npm 之后，`npm install -g ccc-arena` 和 `npx ccc-arena` 也将可用。运行 arena 时需要 git，因为候选实现使用 git worktree。
 
 `arena install-skill` 会把内置 skill 复制到 `~/.claude/skills/arena/SKILL.md`；不需要 symlink 或仓库路径。安装后请重启 Claude Code。它遵循 `CLAUDE_CONFIG_DIR`，也可以用 `arena install-skill --config-dir /path/to/claude-config` 指定。重复执行是安全的：内容相同时不做任何改动，内容不同时除非传入 `--force`，否则保留现有文件。升级后更新 skill，或替换旧的基于 checkout 的 symlink 时，请使用 `--force`。
-
-发布到 npm 之后，也可以使用 `npm install -g ccc-arena`。届时无需全局安装即可运行 CLI：
-
-```bash
-npx --package ccc-arena arena doctor
-npx --package ccc-arena arena run --players claude,codex --task "Add rate limiting"
-```
-
-Claude Code 的 skill 从 PATH 调用 `arena`，因此使用 `/arena` 请采用全局安装。
-
-更新时，用新的包/版本重新执行全局安装命令，然后运行 `arena install-skill --force`。卸载请运行 `npm uninstall -g ccc-arena`，如不再需要，可从 Claude Code 配置目录中删除已安装的 `skills/arena` 目录。卸载包不会删除 arena 的会话和候选 worktree。
 
 ## 宿主模型建议
 
@@ -215,7 +212,8 @@ src/
 ## 开发
 
 ```bash
-npm ci                       # 通过 prepare 构建 dist/
+npm ci
+npm run build                # dist/ 已提交：修改 src/ 后重新构建并一起提交
 npm link                     # 可选：把这个 checkout 暴露为 `arena`
 npm run typecheck
 npm test
@@ -233,7 +231,8 @@ npm ci
 npm run typecheck
 npm test
 npm run test:package
-npm pack                     # 通过 prepare 构建；生成 ccc-arena-<version>.tgz
+npm run build
+npm pack                     # 生成 ccc-arena-<version>.tgz
 ```
 
 直接分享生成的 `.tgz`，或把它附加到 release。接收者用 `npm install -g /path/to/ccc-arena-<version>.tgz` 安装，不需要源码 checkout 或 devDependencies。归档包含编译后的 JavaScript 和 Claude Code skill。运行时依赖由 npm 在安装时下载，因此这不是离线包。

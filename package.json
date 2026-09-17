@@ -32,9 +32,9 @@
     "dev": "node src/arena.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/*.test.ts",
-    "prepare": "npm run build",
     "test:package": "npm run build && node scripts/test-package.mjs",
-    "prepublishOnly": "npm run typecheck && npm test && npm run test:package"
+    "prepublishOnly": "npm run typecheck && npm test && npm run test:package",
+    "check:dist": "npm run build && git diff --exit-code --stat dist"
   },
   "dependencies": {
     "yaml": "^2.9.1",

@@ -25,42 +25,39 @@ Arena Core はハーネスに依存しない小さな CLI です。Claude Code �
 
 ## インストール
 
-[jacksuzuki/ccc-arena](https://github.com/jacksuzuki/ccc-arena) を clone してソースからインストールします（Node.js >= 22.18 と npm が必要）。
+checkout 不要、1コマンドです（Node.js >= 22.18 と npm が必要）。
 
 ```bash
-git clone https://github.com/jacksuzuki/ccc-arena.git
-cd ccc-arena
-npm ci              # 依存をインストールし、prepare で dist/ をビルド
-npm link            # この checkout を arena コマンドとして公開
+npm install -g github:jacksuzuki/ccc-arena
 arena install-skill
 arena doctor         # 作業したいプロジェクトで実行
 ```
 
-`npm link` を使う間は checkout を残してください。更新を pull したら `npm ci` を再実行し、`arena install-skill --force` でインストール済みの skill を更新します。
+コンパイル済みの CLI（`dist/`）をコミットしているので、インストールにビルド工程も devDependencies も不要です。`#v0.1.0` や `#<commit>` でバージョンを固定できます。更新は同じコマンドを再実行し、続けて `arena install-skill --force` を実行します。アンインストールは `npm uninstall -g ccc-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。
 
-### checkout なしでインストールする
-
-このパッケージはまだ npm に公開されていません。メンテナが `.tgz` アーカイブを配布している場合（たとえば [GitHub Releases](https://github.com/jacksuzuki/ccc-arena/releases) 経由）は、グローバルにインストールできます。
+### インストールなしで使う（npx）
 
 ```bash
-npm install -g ./ccc-arena-0.1.0.tgz
+npx --package github:jacksuzuki/ccc-arena arena doctor
+npx --package github:jacksuzuki/ccc-arena arena run --players claude,codex --task "API にレート制限を追加"
+```
+
+初回はパッケージを clone してキャッシュします。Claude Code の skill は PATH 上の `arena` を呼び、無ければこの npx 形式にフォールバックしますが、グローバルインストールの方が速く、`/arena` を確認なしで使えます。
+
+### checkout から使う（開発用）
+
+```bash
+git clone https://github.com/jacksuzuki/ccc-arena.git
+cd ccc-arena
+npm ci
+npm run build        # dist/ はコミット対象。src/ を変えたら再ビルド
+npm link             # この checkout を arena コマンドとして公開
 arena install-skill
 ```
 
-アーカイブからのインストールでは checkout もローカルでの TypeScript ビルドも不要です。GitHub から直接インストールする方法（`npm install -g github:jacksuzuki/ccc-arena`）は**動きません**。npm が devDependencies なしで `prepare` のビルドを実行するため `tsc` が見つからないからです。clone かアーカイブを使ってください。候補の実装は git worktree を使うので、arena の実行には引き続き git が必要です。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。
+`npm pack`（または GitHub Release）の `.tgz` も `npm install -g ./ccc-arena-<version>.tgz` でインストールできます。npm に公開された後は `npm install -g ccc-arena` と `npx ccc-arena` も使えます。候補の実装は git worktree を使うので、arena の実行には git が必要です。
 
 `arena install-skill` は同梱の skill を `~/.claude/skills/arena/SKILL.md` にコピーします。symlink もリポジトリのパスも不要です。インストール後は Claude Code を再起動してください。`CLAUDE_CONFIG_DIR` を尊重し、`arena install-skill --config-dir /path/to/claude-config` でも指定できます。繰り返し実行しても安全で、同一内容なら何もせず、内容が異なる場合は `--force` を付けない限り既存のものを保持します。アップグレード後の skill 更新や、以前の checkout ベースの symlink を置き換えるときは `--force` を使います。
-
-npm に公開された後は `npm install -g ccc-arena` も使えるようになります。その時点で、グローバルインストールなしに CLI を実行することもできます。
-
-```bash
-npx --package ccc-arena arena doctor
-npx --package ccc-arena arena run --players claude,codex --task "Add rate limiting"
-```
-
-Claude Code の skill は PATH 上の `arena` を呼ぶので、`/arena` を使うにはグローバルインストールしてください。
-
-更新するには、新しいパッケージ/バージョンでグローバルインストールのコマンドを再実行し、`arena install-skill --force` を実行します。アンインストールは `npm uninstall -g ccc-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。
 
 ## ホストモデルの推奨
 
@@ -215,7 +212,8 @@ src/
 ## 開発
 
 ```bash
-npm ci                       # prepare で dist/ をビルド
+npm ci
+npm run build                # dist/ はコミット対象: src/ の変更と一緒に再ビルドしてコミット
 npm link                     # 任意: この checkout を `arena` として公開
 npm run typecheck
 npm test
@@ -233,7 +231,8 @@ npm ci
 npm run typecheck
 npm test
 npm run test:package
-npm pack                     # prepare でビルドし ccc-arena-<version>.tgz を生成
+npm run build
+npm pack                     # ccc-arena-<version>.tgz を生成
 ```
 
 生成した `.tgz` を直接配布するか、リリースに添付します。受け取った側は `npm install -g /path/to/ccc-arena-<version>.tgz` でインストールでき、ソースの checkout や devDependencies は不要です。アーカイブにはコンパイル済み JavaScript と Claude Code の skill が含まれます。実行時依存はインストール時に npm がダウンロードするので、オフラインバンドルではありません。

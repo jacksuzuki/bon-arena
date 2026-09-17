@@ -19,3 +19,4 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run check:dist   # dist/ is committed; fails if src/ changed without npm run build

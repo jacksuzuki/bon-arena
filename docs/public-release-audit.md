@@ -214,8 +214,10 @@ git check-ignore --no-index .env.example .env.test.example .claude/skills/arena/
 6. **GitHub 側の設定**: リポジトリ作成後に Description / Topics を設定し、`package.json` の `homepage`
    （`https://github.com/jacksuzuki/ccc-arena#readme`）が実在することを確認する。Actions を有効にすると
    `ci.yml` が最初の push で走るので成功を確認する。
-7. **配布方法**: `npm install -g github:jacksuzuki/ccc-arena` は動かない（`prepare` の `tsc` が devDependencies
-   なしで実行され失敗することを `git+file://` で実測）。README は clone + `npm link` と `.tgz` を案内している。
-   npm に publish したら README の Install 節を更新する。
+7. **配布方法**: npm 10.9 では `prepare` スクリプトが存在するだけで `npm install -g <git>` の配置が空になる
+   （最小パッケージで実測）。そのため `prepare` を廃止し、ビルド済み `dist/` をコミットしている。
+   `npm install -g github:jacksuzuki/ccc-arena` と `npx --package github:jacksuzuki/ccc-arena arena …` は
+   ビルド無しで動く。CI の `npm run check:dist` が `dist/` の陳腐化を検出する。npm に publish したら README の
+   Install 節を更新する。
 8. ネットワークが使える環境で `npm run test:package` を完走させる。
 9. 最終変更をレビューし、公開対象の branch / tag とファイルを再走査してから push する。
