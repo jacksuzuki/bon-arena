@@ -1,17 +1,17 @@
 {
-  "name": "ccc-arena",
-  "version": "0.2.2",
+  "name": "bon-arena",
+  "version": "0.3.0",
   "description": "Run multiple coding agents (Claude Code, Codex CLI, ...) on the same task in isolated git worktrees and compare the results.",
   "type": "module",
   "license": "MIT",
   "author": "Shuichi Suzuki",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jacksuzuki/ccc-arena.git"
+    "url": "git+https://github.com/jacksuzuki/bon-arena.git"
   },
-  "homepage": "https://github.com/jacksuzuki/ccc-arena#readme",
+  "homepage": "https://github.com/jacksuzuki/bon-arena#readme",
   "bugs": {
-    "url": "https://github.com/jacksuzuki/ccc-arena/issues"
+    "url": "https://github.com/jacksuzuki/bon-arena/issues"
   },
   "bin": {
     "arena": "dist/arena.js"

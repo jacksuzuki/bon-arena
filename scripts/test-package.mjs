@@ -27,7 +27,7 @@ try {
   const bin = process.platform === "win32" ? prefix : join(prefix, "bin")
   const executable = join(bin, process.platform === "win32" ? "arena.cmd" : "arena")
   const moduleRoot = process.platform === "win32" ? join(prefix, "node_modules") : join(prefix, "lib/node_modules")
-  const installed = join(moduleRoot, "ccc-arena")
+  const installed = join(moduleRoot, "bon-arena")
   assert.ok(existsSync(executable), "npm did not create the arena command")
   assert.ok(!existsSync(join(installed, "node_modules/typescript")), "Installed development dependencies")
   const home = join(temporary, "claude config")

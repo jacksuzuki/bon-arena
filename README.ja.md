@@ -1,4 +1,4 @@
-# ccc-arena
+# bon-arena
 
 [English](README.md) | **日本語** | [简体中文](README.zh-CN.md)
 
@@ -25,32 +25,32 @@ Arena Core はハーネスに依存しない小さな CLI です。Claude Code �
 
 ## インストール
 
-npm に [`ccc-arena`](https://www.npmjs.com/package/ccc-arena) として公開しています（Node.js >= 22.18）。
+npm に [`bon-arena`](https://www.npmjs.com/package/bon-arena) として公開しています（Node.js >= 22.18）。
 
 ```bash
-npm install -g ccc-arena
+npm install -g bon-arena
 arena install-skill
 arena doctor         # 作業したいプロジェクトで実行
 ```
 
-更新は `npm install -g ccc-arena@latest` を実行し、続けて `arena install-skill --force` を実行します。アンインストールは `npm uninstall -g ccc-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。候補の実装は git worktree を使うので、arena の実行には git が必要です。
+更新は `npm install -g bon-arena@latest` を実行し、続けて `arena install-skill --force` を実行します。アンインストールは `npm uninstall -g bon-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。候補の実装は git worktree を使うので、arena の実行には git が必要です。
 
 ### インストールなしで使う（npx）
 
 ```bash
-npx ccc-arena doctor
-npx ccc-arena run --players claude,codex --task "API にレート制限を追加"
+npx bon-arena doctor
+npx bon-arena run --players claude,codex --task "API にレート制限を追加"
 ```
 
-Claude Code の skill は PATH 上の `arena` を呼び、無ければ `npx ccc-arena` にフォールバックしますが、グローバルインストールの方が速く、`/arena` を確認なしで使えます。
+Claude Code の skill は PATH 上の `arena` を呼び、無ければ `npx bon-arena` にフォールバックしますが、グローバルインストールの方が速く、`/arena` を確認なしで使えます。
 
 ### GitHub や checkout から使う
 
-コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/ccc-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/ccc-arena arena doctor` です。`#v0.2.2` でバージョンを固定できます。開発用:
+コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/bon-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/bon-arena arena doctor` です。`#v0.3.0` でバージョンを固定できます。開発用:
 
 ```bash
-git clone https://github.com/jacksuzuki/ccc-arena.git
-cd ccc-arena
+git clone https://github.com/jacksuzuki/bon-arena.git
+cd bon-arena
 npm ci
 npm run build        # dist/ はコミット対象。src/ を変えたら再ビルド
 npm link             # この checkout を arena コマンドとして公開
@@ -247,10 +247,10 @@ npm run typecheck
 npm test
 npm run test:package
 npm run build
-npm pack                     # ccc-arena-<version>.tgz を生成
+npm pack                     # bon-arena-<version>.tgz を生成
 ```
 
-リリース手順: バージョンを上げ（`npm version patch|minor`）、`npm run build` で `dist/` を再生成してコミットし、`npm publish --access public --otp=<code>`（アカウントは 2FA 必須）を実行してから `git push --follow-tags` します。`prepublishOnly` フックが先に typecheck、ユニットテスト、パッケージのスモークテストを実行します。このリポジトリは自動公開しません。生成した `.tgz` を直接配布して `npm install -g ./ccc-arena-<version>.tgz` でインストールしてもらうこともできます。
+リリース手順: バージョンを上げ（`npm version patch|minor`）、`npm run build` で `dist/` を再生成してコミットし、`npm publish --access public --otp=<code>`（アカウントは 2FA 必須）を実行してから `git push --follow-tags` します。`prepublishOnly` フックが先に typecheck、ユニットテスト、パッケージのスモークテストを実行します。このリポジトリは自動公開しません。生成した `.tgz` を直接配布して `npm install -g ./bon-arena-<version>.tgz` でインストールしてもらうこともできます。
 
 ## v0.1 に含まれないもの
 

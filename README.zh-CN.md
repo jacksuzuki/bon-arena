@@ -1,4 +1,4 @@
-# ccc-arena
+# bon-arena
 
 [English](README.md) | [日本語](README.ja.md) | **简体中文**
 
@@ -25,32 +25,32 @@ Arena Core 是一个小巧、与宿主无关的 CLI。Claude Code 的 `/arena` s
 
 ## 安装
 
-已发布到 npm：[`ccc-arena`](https://www.npmjs.com/package/ccc-arena)（需要 Node.js >= 22.18）：
+已发布到 npm：[`bon-arena`](https://www.npmjs.com/package/bon-arena)（需要 Node.js >= 22.18）：
 
 ```bash
-npm install -g ccc-arena
+npm install -g bon-arena
 arena install-skill
 arena doctor         # 在你要工作的项目中运行
 ```
 
-更新时运行 `npm install -g ccc-arena@latest`，然后执行 `arena install-skill --force`。卸载请运行 `npm uninstall -g ccc-arena`，如不再需要，可从 Claude Code 配置目录中删除 `skills/arena`。卸载包不会删除 arena 的会话和候选 worktree。如果安装后找不到 `arena`，请把 npm 的全局 bin 目录加入 PATH（macOS/Linux 为 `$(npm prefix -g)/bin`，Windows 为 `npm prefix -g`）。运行 arena 时需要 git，因为候选实现使用 git worktree。
+更新时运行 `npm install -g bon-arena@latest`，然后执行 `arena install-skill --force`。卸载请运行 `npm uninstall -g bon-arena`，如不再需要，可从 Claude Code 配置目录中删除 `skills/arena`。卸载包不会删除 arena 的会话和候选 worktree。如果安装后找不到 `arena`，请把 npm 的全局 bin 目录加入 PATH（macOS/Linux 为 `$(npm prefix -g)/bin`，Windows 为 `npm prefix -g`）。运行 arena 时需要 git，因为候选实现使用 git worktree。
 
 ### 免安装使用（npx）
 
 ```bash
-npx ccc-arena doctor
-npx ccc-arena run --players claude,codex --task "为 API 添加限流"
+npx bon-arena doctor
+npx bon-arena run --players claude,codex --task "为 API 添加限流"
 ```
 
-Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到 `npx ccc-arena`，但全局安装更快，并且可以不经确认直接使用 `/arena`。
+Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到 `npx bon-arena`，但全局安装更快，并且可以不经确认直接使用 `/arena`。
 
 ### 从 GitHub 或 checkout 使用
 
-编译后的 CLI（`dist/`）已提交到仓库，因此从仓库安装也不需要构建步骤：`npm install -g --install-links github:jacksuzuki/ccc-arena`（该参数是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink 并随即删除该克隆）或 `npx --package github:jacksuzuki/ccc-arena arena doctor`。可用 `#v0.2.2` 固定版本。开发用：
+编译后的 CLI（`dist/`）已提交到仓库，因此从仓库安装也不需要构建步骤：`npm install -g --install-links github:jacksuzuki/bon-arena`（该参数是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink 并随即删除该克隆）或 `npx --package github:jacksuzuki/bon-arena arena doctor`。可用 `#v0.3.0` 固定版本。开发用：
 
 ```bash
-git clone https://github.com/jacksuzuki/ccc-arena.git
-cd ccc-arena
+git clone https://github.com/jacksuzuki/bon-arena.git
+cd bon-arena
 npm ci
 npm run build        # dist/ 已提交；修改 src/ 后需重新构建
 npm link             # 把这个 checkout 暴露为 arena 命令
@@ -247,10 +247,10 @@ npm run typecheck
 npm test
 npm run test:package
 npm run build
-npm pack                     # 生成 ccc-arena-<version>.tgz
+npm pack                     # 生成 bon-arena-<version>.tgz
 ```
 
-发布流程：提升版本（`npm version patch|minor`），运行 `npm run build` 并提交 `dist/`，然后执行 `npm publish --access public --otp=<code>`（账号需启用 2FA），再 `git push --follow-tags`。`prepublishOnly` 钩子会先运行 typecheck、单元测试和包冒烟测试。本仓库不会自动发布。生成的 `.tgz` 也可以直接分享，用 `npm install -g ./ccc-arena-<version>.tgz` 安装。
+发布流程：提升版本（`npm version patch|minor`），运行 `npm run build` 并提交 `dist/`，然后执行 `npm publish --access public --otp=<code>`（账号需启用 2FA），再 `git push --follow-tags`。`prepublishOnly` 钩子会先运行 typecheck、单元测试和包冒烟测试。本仓库不会自动发布。生成的 `.tgz` 也可以直接分享，用 `npm install -g ./bon-arena-<version>.tgz` 安装。
 
 ## v0.1 不包含
 

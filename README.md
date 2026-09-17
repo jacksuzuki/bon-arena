@@ -1,4 +1,4 @@
-# ccc-arena
+# bon-arena
 
 **English** | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
@@ -27,16 +27,16 @@ other hosts (Codex, standalone use, other harnesses) can drive the same CLI.
 
 ## Install
 
-Published on npm as [`ccc-arena`](https://www.npmjs.com/package/ccc-arena) (Node.js >= 22.18):
+Published on npm as [`bon-arena`](https://www.npmjs.com/package/bon-arena) (Node.js >= 22.18):
 
 ```bash
-npm install -g ccc-arena
+npm install -g bon-arena
 arena install-skill
 arena doctor         # run in the project you want to work on
 ```
 
-To update, run `npm install -g ccc-arena@latest` and then `arena install-skill --force`. To
-uninstall, run `npm uninstall -g ccc-arena` and remove `skills/arena` from your Claude Code config
+To update, run `npm install -g bon-arena@latest` and then `arena install-skill --force`. To
+uninstall, run `npm uninstall -g bon-arena` and remove `skills/arena` from your Claude Code config
 directory if no longer needed. Arena sessions and candidate worktrees are not removed by
 uninstalling the package. If `arena` is not found after installation, add the npm global bin
 directory to PATH (`$(npm prefix -g)/bin` on macOS/Linux, `npm prefix -g` on Windows). git is
@@ -45,24 +45,24 @@ required when running arenas because candidate implementations use git worktrees
 ### Zero-install (npx)
 
 ```bash
-npx ccc-arena doctor
-npx ccc-arena run --players claude,codex --task "Add rate limiting"
+npx bon-arena doctor
+npx bon-arena run --players claude,codex --task "Add rate limiting"
 ```
 
-The Claude Code skill calls `arena` from PATH and falls back to `npx ccc-arena` when it is
+The Claude Code skill calls `arena` from PATH and falls back to `npx bon-arena` when it is
 missing, but the global install is faster and lets you use `/arena` without any prompt.
 
 ### From GitHub or a checkout
 
 The compiled CLI (`dist/`) is committed, so the repository installs without a build step:
-`npm install -g --install-links github:jacksuzuki/ccc-arena` (the flag matters: without it npm 10
+`npm install -g --install-links github:jacksuzuki/bon-arena` (the flag matters: without it npm 10
 installs a git package as a symlink to a temporary clone that it deletes right away) or
-`npx --package github:jacksuzuki/ccc-arena arena doctor`. Pin a version with `#v0.2.2`. For
+`npx --package github:jacksuzuki/bon-arena arena doctor`. Pin a version with `#v0.3.0`. For
 development:
 
 ```bash
-git clone https://github.com/jacksuzuki/ccc-arena.git
-cd ccc-arena
+git clone https://github.com/jacksuzuki/bon-arena.git
+cd bon-arena
 npm ci
 npm run build        # dist/ is committed; rebuild after changing src/
 npm link             # expose this checkout as the arena command
@@ -314,14 +314,14 @@ npm run typecheck
 npm test
 npm run test:package
 npm run build
-npm pack                     # produces ccc-arena-<version>.tgz
+npm pack                     # produces bon-arena-<version>.tgz
 ```
 
 Release: bump the version (`npm version patch|minor`), run `npm run build` and commit `dist/`, then
 `npm publish --access public --otp=<code>` (the account requires 2FA) and `git push --follow-tags`.
 The `prepublishOnly` hook runs typecheck, unit tests and the package smoke test first. This
 repository does not publish automatically. The generated `.tgz` can also be shared directly and
-installed with `npm install -g ./ccc-arena-<version>.tgz`.
+installed with `npm install -g ./bon-arena-<version>.tgz`.
 
 ## Not in v0.1
 

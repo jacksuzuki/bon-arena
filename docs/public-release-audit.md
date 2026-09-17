@@ -2,7 +2,9 @@
 
 ## 対象と結論
 
-2026-09-17 に `jacksuzuki/ccc-arena` の public 公開に向けて実施した監査。
+2026-09-17 に `jacksuzuki/bon-arena` の public 公開に向けて実施した監査。
+
+> 2026-09-17 追記: リポジトリと npm パッケージは `ccc-arena` から `bon-arena` に改名した（npm の `ccc-arena` は全バージョン unpublish）。本書中の名称は改名後で統一している。
 変更元 HEAD は `038d4a83777a48357e962c91b1d04ed6986fb2f1`。
 追跡ファイル 36 件と今回の公開準備変更を調査した。
 履歴は現在のブランチだけでなく、実行時の `git rev-list --all` で到達できた
@@ -38,7 +40,7 @@ GitHub リポジトリ作成、push、npm publish、履歴書き換えは実施�
 | 実行時データ | 追跡されていないが、生成物に秘密情報が入り得る | `src/process/spawn.ts` は継承した環境変数を supervisor spec に保存し、`src/core.ts` は `logs/<player>.spec.json` に出力する。セッションには依頼文・パス、ログには runner 出力が残る | 実行済みセッションを公開しない。`ARENA_HOME` を任意の場所へ変えた場合、その場所も別途管理する |
 | `.gitignore` | 不足を補完 | `.env*`（sanitized example は例外）、`.npmrc`、鍵、`.arena/`、ローカル Claude 設定、テストの一時フォルダ、`.tgz` を追加。`git check-ignore` で動作確認 | ignore は既に追跡されたファイルを消さず、`git add -f` も防がない |
 | パッケージ公開範囲・bin | 妥当。LICENSE を明示的に追加 | `npm pack --dry-run --json` 成功、26 ファイル。`dist/` 22 ファイル、skill、README、LICENSE、package.json のみ。`arena` は shebang 付き `dist/arena.js` を指す。依存の bundled 配列は空 | 実際の配布直前に pack 内容を再確認。監査書・CI・ソース・テスト・node_modules は npm archive に含まれない |
-| メタデータ・導入手順 | 公開先を統一 | repository / homepage / bugs を `jacksuzuki/ccc-arena` に設定し author は実名のみ。README は clone → npm ci → npm link を先頭にし、npm 公開後の手順は条件付きにした | リポジトリ作成と push は人間が実施 |
+| メタデータ・導入手順 | 公開先を統一 | repository / homepage / bugs を `jacksuzuki/bon-arena` に設定し author は実名のみ。README は clone → npm ci → npm link を先頭にし、npm 公開後の手順は条件付きにした | リポジトリ作成と push は人間が実施 |
 | CI | secret 不要の最小構成 | `push` / `pull_request`、Node 22、`npm ci` → typecheck → test。`contents: read`、checkout の credential 永続化なし。YAML を既存の yaml で parse し構成を検査 | GitHub 上での実行は未検証。fork PR は GitHub の初回実行承認ポリシーに従う |
 
 ## 再現方法
@@ -181,7 +183,7 @@ git diff --check
 git check-ignore .env .env.local subdir/.env.production .npmrc test.pem test.key \
   test.p12 test.pfx id_rsa id_ed25519 .arena/session.json \
   .arena-package-test-demo/file .arena-install-test-demo/file \
-  .claude/settings.local.json ccc-arena-0.1.0.tgz
+  .claude/settings.local.json bon-arena-0.1.0.tgz
 git check-ignore --no-index .env.example .env.test.example .claude/skills/arena/SKILL.md .arena.yaml
 ```
 
@@ -212,13 +214,13 @@ git check-ignore --no-index .env.example .env.test.example .claude/skills/arena/
 4. ソース・文書・AI 生成物の権利を最終確認する。外部から持ち込んだコードがある場合は、その出所と表示条件を確認する。
 5. この監査書を公開物に残すか決める。削除するなら公開対象の最初の commit に入れる前に判断する。
 6. **GitHub 側の設定**: リポジトリ作成後に Description / Topics を設定し、`package.json` の `homepage`
-   （`https://github.com/jacksuzuki/ccc-arena#readme`）が実在することを確認する。Actions を有効にすると
+   （`https://github.com/jacksuzuki/bon-arena#readme`）が実在することを確認する。Actions を有効にすると
    `ci.yml` が最初の push で走るので成功を確認する。
 7. **配布方法**: npm 10.9 は依存関係を持つ git パッケージを `npm install -g` すると、キャッシュ内の一時 clone への
    symlink を置いてその clone を削除するため、`arena` がリンク切れになる（実測）。`--install-links` を付けると
    実体コピーになり動作する。加えて `prepare` を廃止し、ビルド済み `dist/` をコミットしているので、
-   `npm install -g --install-links github:jacksuzuki/ccc-arena`、`npx --package github:jacksuzuki/ccc-arena arena …`、
+   `npm install -g --install-links github:jacksuzuki/bon-arena`、`npx --package github:jacksuzuki/bon-arena arena …`、
    GitHub の archive tarball URL のいずれもビルド無しで動く。CI の `npm run check:dist` が `dist/` の陳腐化を
-   検出する。2026-09-17 に `ccc-arena@0.1.0` として npm に publish 済み（`npm install -g ccc-arena` / `npx ccc-arena`）。
+   検出する。2026-09-17 に `bon-arena@0.1.0` として npm に publish 済み（`npm install -g bon-arena` / `npx bon-arena`）。
 8. ネットワークが使える環境で `npm run test:package` を完走させる。
 9. 最終変更をレビューし、公開対象の branch / tag とファイルを再走査してから push する。
