@@ -12,6 +12,8 @@ export function buildArenaPrompt(task: string, opts: ArenaPromptOptions = {}): s
     ? `The task below is a specification that was refined together with the user before this run.
 Treat it as authoritative: implement what it says, respect its scope, non-goals and recorded decisions,
 and settle any remaining detail yourself in the spirit of the specification.
+It fixes what is wanted, not how to build it: investigate the code and choose the design yourself.
+A "Notes (unverified)" section, if present, holds hints only — check them before relying on them.
 
 `
     : ""

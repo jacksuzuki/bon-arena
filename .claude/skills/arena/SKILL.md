@@ -104,8 +104,16 @@ and is recorded as such. Then:
 ### 4. Refine (skipped in simple mode)
 
 Goal: turn the request into a specification that two independent, headless runners could implement
-in one pass without guessing. You clarify; you do **not** implement anything here, and you do not
-create worktrees, run setup or launch runners until the user confirms in step 4.7.
+in one pass without guessing **what is wanted**. You clarify; you do **not** implement anything
+here, and you do not create worktrees, run setup or launch runners until the user confirms in
+step 4.7.
+
+Stay on your side of the line. An arena is a best-of-N: its value is that independent runners
+investigate and design differently. Whatever you investigate or design for them is shared by every
+candidate, including your mistakes, and the candidates converge. You own the user's intent, the
+user's decisions and the observable acceptance criteria. The runners own the investigation (reading
+the code in depth, probing tools and APIs) and the design (files, structure, internal names,
+approach).
 
 1. Run `arena refine` with the original request. It saves the request as a draft file (path in the
    output), prints repository facts and the specification template, and is the procedure to follow:
@@ -116,28 +124,37 @@ create worktrees, run setup or launch runners until the user confirms in step 4.
    ARENA_TASK
    ```
 
-2. **Understand.** Restate the request in one sentence. Read the code it touches (read-only, in the
-   user's checkout): entry points, the modules to change, existing tests, naming and error-handling
-   conventions. Use subagents for broad searches if the repo is large. Candidates start from the
+2. **Understand.** Restate the request in one sentence. Read code (read-only, in the user's
+   checkout) only as far as needed to see what the request means here and where it is ambiguous.
+   Do not work out the implementation, and do not try out tools, CLIs or APIs on the runners'
+   behalf: that is their job, and each should do it independently. Candidates start from the
    preflight HEAD: if a relevant file is dirty or untracked, look at the committed version
    (`git show HEAD:<path>`) and do not base the specification on changes the runners will not get.
-3. **Find the gaps.** List every decision a runner would otherwise have to guess: scope boundaries,
-   affected files/modules, behavior in edge cases, public API and naming, backward compatibility,
-   user-facing text, expected tests, what must not change.
-4. **Settle what you can** from the code, the project's conventions and sensible defaults. Keep a
-   note of each decision.
+3. **Find the gaps** in *what is wanted*: scope boundaries, behavior in edge cases, public API and
+   user-facing names and text, backward compatibility, what must not change. Choices about *how*
+   (which files, structure, internal names, approach) are not gaps; list the notable ones under
+   "Open to the implementer" instead of deciding them.
+4. **Settle what you can** of those gaps from the project's conventions and sensible defaults.
+   Keep a note of each decision.
 5. **Ask only what remains** with AskUserQuestion: batch up to four questions per call, each with
    concrete options and a recommended default; at most two rounds. If the user defers ("you decide",
    "お任せ"), choose and record the choice. If nothing is genuinely unclear, ask nothing and say so.
-6. **Write the specification** using the template `arena refine` printed (Goal, Background, Scope
-   in/out, Requirements, Acceptance criteria, Constraints, Verification, Decisions); omit sections
-   that would be empty. Integrate the answers; no Q&A transcript. Keep the user's language and the
-   user's exact identifiers and examples. Be concrete about *what*: name files, functions, commands,
-   messages, edge cases, and include the verification commands from `arena doctor`. Do not
-   over-prescribe *how*: the point of an arena is that two runners may solve it differently, so leave
-   design and implementation choices open unless the user or the codebase fixes them. Never invent
-   requirements the user did not ask for, and never resolve conflicting requirements by silently
-   dropping one — ask.
+6. **Write the specification** using the template `arena refine` printed (Goal, Context, Scope
+   in/out, Requirements, Acceptance criteria, Constraints, Verification, Decisions, Open to the
+   implementer, Notes (unverified)); omit sections that would be empty. Integrate the answers; no
+   Q&A transcript. Keep the user's language and the user's exact identifiers and examples.
+   - Be concrete about *what*: commands, inputs and outputs, user-facing names and messages, edge
+     cases, and the verification commands from `arena doctor`.
+   - Write acceptance criteria as checks on observable behavior that any good implementation would
+     pass. Never assert internal structure (function names, argument layout, file placement).
+   - Do not describe the existing code; runners read it themselves. "Context" is for what they
+     cannot find in the repository.
+   - Test every line: would a different, equally good implementation violate it? If so, and neither
+     the user nor a public contract demands it, delete it or move it to "Open to the implementer".
+   - Implementation facts you happened to learn go under "Notes (unverified)" — runners are told to
+     check them, not obey them — or nowhere. Keep that section short.
+   - Never invent requirements the user did not ask for, and never resolve conflicting requirements
+     by silently dropping one — ask.
 7. **Confirm.** Show the full specification and ask with AskUserQuestion: "Launch with this
    specification?" with options **Launch** / **Edit** (take the user's changes and show it again) /
    **Cancel** (end without creating a session). Do not offer a switch to simple mode here: the mode

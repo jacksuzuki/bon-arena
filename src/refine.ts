@@ -3,7 +3,9 @@
  *
  * Arena Core never calls a model. Refinement — understanding the user's request, asking about
  * unclear points and turning it into a specification that runners can implement in one shot — is
- * done by the host (e.g. the Claude Code /arena skill). This module gives every host the same
+ * done by the host (e.g. the Claude Code /arena skill). The host settles *what* is wanted (intent,
+ * the user's decisions, observable acceptance); investigation and design stay with the runners,
+ * because a best-of-N comparison is only worth something when the candidates are independent. This module gives every host the same
  * material: repository facts, a saved copy of the original request, the procedure to follow and
  * the specification template, so refined tasks look alike no matter which host produced them.
  */
@@ -96,35 +98,44 @@ export function buildRefineContext(opts: RefineOptions): RefineContext {
   }
 }
 
-/** Skeleton the host fills in. Every section is there so two runners read the same contract. */
+/**
+ * Skeleton the host fills in. It fixes what the user wants, so two runners read the same contract,
+ * and deliberately has no place for a design: how to build it is what the runners compete on.
+ */
 export const REFINED_TASK_TEMPLATE = `# <title: one line, imperative>
 
 ## Goal
 <what must be true when the task is done, in one or two sentences>
 
-## Background
-<what exists today and where: modules, entry points, tests, conventions the change touches>
+## Context
+<only what a runner cannot find in the repository: why the change is wanted, facts from the user, external constraints. Do not describe the code; runners read it themselves>
 
 ## Scope
-- In: <concrete changes, one per line>
+- In: <outcomes to deliver, one per line — not the files or functions to edit>
 - Out (non-goals): <things a runner might be tempted to do but must not>
 
 ## Requirements
-1. <behavior, API, naming, data, error handling — concrete enough to test>
+1. <behavior as seen from outside: commands, inputs and outputs, user-facing names and text, error cases. Names and interfaces only where they are public or the user fixed them>
 2. …
 
 ## Acceptance criteria
-- [ ] <observable check; include the exact command when there is one>
+- [ ] <check on observable behavior that any good implementation would pass; include the exact command when there is one. Never assert internal structure (function names, argument layout, file placement)>
 - [ ] …
 
 ## Constraints
-- <compatibility to preserve, files not to touch, style/conventions to follow, dependencies allowed>
+- <compatibility to preserve, files not to touch, conventions to follow, dependencies allowed>
 
 ## Verification
-- <commands that must pass; new tests to add>
+- <commands that must pass; that new behavior needs tests — not which tests>
 
 ## Decisions
 - <question that was open> → <decision> (<user / default>)
+
+## Open to the implementer
+- <design choices you noticed and deliberately leave open: approach, structure, internal naming, …>
+
+## Notes (unverified)
+- <optional. Findings of yours about how it could be built. Runners are told these are hints to check, not requirements. Leave out anything a runner finds by reading the code>
 `
 
 /** Markdown brief for the host performing the refinement. Printed by `arena refine`. */
@@ -148,15 +159,15 @@ export function renderRefineBrief(ctx: RefineContext): string {
   out.push("")
   out.push("## Why", "")
   out.push(
-    "Runners work headless and cannot ask anything. Every gap in the request becomes a guess, and two runners guess differently, which makes the candidates hard to compare. Close the gaps now: runners receive only the specification you write; the original request is stored with the session for reviewers. Until the user confirms the specification, do not create worktrees, run setup, launch runners, or implement anything.",
+    "Runners work headless and cannot ask anything. Every gap in what the user wants becomes a guess, and two runners guess differently, which makes the candidates hard to compare. Close those gaps now: runners receive only the specification you write; the original request is stored with the session for reviewers. But stop there. An arena is a best-of-N: its value is that independent runners investigate and design differently, and anything you investigate or design for them is shared by every candidate — including your mistakes. Settle what is wanted; leave how to build it to the runners. Until the user confirms the specification, do not create worktrees, run setup, launch runners, or implement anything.",
     "",
   )
   out.push("## Procedure", "")
-  out.push("1. Understand — restate the request in one sentence. Read the code it touches (read-only): entry points, the modules to change, existing tests, naming and error-handling conventions. Candidates start from HEAD: for dirty or untracked files look at the committed version (git show HEAD:<path>) and do not rely on changes the runners will not receive.")
-  out.push("2. Find the gaps — list every decision a runner would otherwise have to guess: scope boundaries, files and modules affected, behavior in edge cases, public API and naming, backward compatibility, user-facing text, which tests are expected, what must not change.")
-  out.push("3. Settle what you can — from the code, the project's conventions, and sensible defaults. Record each such decision.")
+  out.push("1. Understand — restate the request in one sentence. Read code (read-only) only as far as needed to see what the request means here and where it is ambiguous; do not work out the implementation, and do not probe tools or APIs on the runners' behalf. Candidates start from HEAD: for dirty or untracked files look at the committed version (git show HEAD:<path>) and do not rely on changes the runners will not receive.")
+  out.push("2. Find the gaps — list the decisions about what is wanted that a runner would otherwise have to guess: scope boundaries, behavior in edge cases, public API and user-facing names and text, backward compatibility, what must not change. Decisions about how (which files, which structure, which internal names, which approach) are not gaps; they go under \"Open to the implementer\".")
+  out.push("3. Settle what you can — from the project's conventions and sensible defaults, for the gaps of step 2 only. Record each such decision.")
   out.push("4. Ask the user only what remains — batch the questions (a few per round, each with concrete options and a recommended default), at most two rounds. If the user defers (\"you decide\", \"お任せ\"), choose and record the choice. If nothing is unclear, skip the questions and say so.")
-  out.push("5. Write the specification with the template below — integrate the answers, no Q&A transcript, keep the user's language and exact identifiers, omit empty sections, and make it self-contained (runners cannot see this conversation). Be concrete about what must be true; leave how open so the runners can take different approaches. Never invent requirements or silently drop a conflicting one. Scale the detail to the task.")
+  out.push("5. Write the specification with the template below — integrate the answers, no Q&A transcript, keep the user's language and exact identifiers, omit empty sections, and make it self-contained (runners cannot see this conversation). Be concrete about what must be true; leave how open so the runners can take different approaches. Test every line: would a different, equally good implementation violate it? If so, and neither the user nor a public contract demands it, delete the line or move it to \"Open to the implementer\". Implementation facts you happened to learn go under \"Notes (unverified)\" or nowhere. Never invent requirements or silently drop a conflicting one. Scale the detail to the task.")
   out.push("6. Confirm — show the specification and let the user choose: launch with it, edit it, or cancel. Simple mode is chosen up front (e.g. `task --simple`), never at this step, and a half-refined draft is never sent.")
   out.push("7. Launch — the original request is recorded alongside the specification:")
   out.push("")

@@ -70,7 +70,10 @@ test("renderRefineBrief contains the request, repository facts, procedure, launc
   assert.match(out, /--original-task-file \/home\/\.arena\/drafts\/20260917-abc123\.original\.md --json <<'ARENA_TASK'/)
   assert.match(out, /Simple mode instead/)
   assert.ok(out.includes(REFINED_TASK_TEMPLATE.trimEnd()))
-  for (const heading of ["## Goal", "## Scope", "## Requirements", "## Acceptance criteria", "## Constraints", "## Verification", "## Decisions"]) {
+  assert.match(out, /Settle what is wanted; leave how to build it to the runners/)
+  assert.match(out, /would a different, equally good implementation violate it\?/)
+  assert.doesNotMatch(REFINED_TASK_TEMPLATE, /## Background/)
+  for (const heading of ["## Goal", "## Context", "## Scope", "## Requirements", "## Acceptance criteria", "## Constraints", "## Verification", "## Decisions", "## Open to the implementer", "## Notes (unverified)"]) {
     assert.ok(REFINED_TASK_TEMPLATE.includes(heading), heading)
   }
 })

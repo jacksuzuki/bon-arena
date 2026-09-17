@@ -101,10 +101,14 @@ In any git repository:
 ```
 
 Claude Code asks for Player 1 / Player 2, then **refines the task** before anything is launched:
-it reads the code the request touches, works out what the runners would otherwise have to guess
-(scope, affected files, edge cases, naming, compatibility, tests), asks you only about the points it
-cannot settle itself, and writes a specification (goal, scope, requirements, acceptance criteria,
-constraints, verification, decisions). You approve or edit it, and only then are both players
+it works out what the runners would otherwise have to guess about *what you want* (scope, edge
+cases, user-facing names, compatibility), asks you only about the points it cannot settle itself,
+and writes a specification (goal, context, scope, requirements, acceptance criteria as observable
+behavior, constraints, verification, decisions, and what is left open to the implementer). It
+deliberately stops there: investigating the code in depth and designing the solution is what the
+runners compete on, and anything the host works out for them would be shared by every candidate,
+mistakes included. Findings it has anyway go into a short "Notes (unverified)" section that runners
+are told to check rather than obey. You approve or edit it, and only then are both players
 launched in isolated worktrees with that specification. The runners are headless and cannot ask
 questions, so this is the step that keeps them from guessing differently. Your original request is
 stored with the session and shown next to the specification in `arena compare`.
