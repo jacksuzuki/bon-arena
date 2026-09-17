@@ -1,0 +1,249 @@
+# ccc-arena
+
+[English](README.md) | **日本語** | [简体中文](README.zh-CN.md)
+
+2つのコーディングエージェントに**同じタスク**を**別々の git worktree** で実装させ、成果物（diff の統計、テスト、lint、typecheck）を比較して、採用するものを選べるツールです。
+
+```
+Claude Code (/arena)
+      ↓
+  依頼をあなたと一緒にワンショットで実装できる仕様へ洗練する   ("simple" で省略可)
+      ↓
+  Arena Core  ──┬── worktree A ── Claude Code CLI
+                └── worktree B ── Codex CLI
+      ↓
+  収集 (diff, test, lint, typecheck) → 比較 → あなたが判断
+```
+
+Arena Core はハーネスに依存しない小さな CLI です。Claude Code の `/arena` skill が最初のホストで、他のホスト（Codex、単体利用、他のハーネス）からも同じ CLI を操作できます。
+
+## 動作要件
+
+- Node.js >= 22.18（または Bun。Node 互換 API のみ使用）
+- git
+- 対戦させる runner: `claude`（Claude Code CLI）や `codex`（Codex CLI）が PATH にあること
+
+## インストール
+
+[jacksuzuki/ccc-arena](https://github.com/jacksuzuki/ccc-arena) を clone してソースからインストールします（Node.js >= 22.18 と npm が必要）。
+
+```bash
+git clone https://github.com/jacksuzuki/ccc-arena.git
+cd ccc-arena
+npm ci              # 依存をインストールし、prepare で dist/ をビルド
+npm link            # この checkout を arena コマンドとして公開
+arena install-skill
+arena doctor         # 作業したいプロジェクトで実行
+```
+
+`npm link` を使う間は checkout を残してください。更新を pull したら `npm ci` を再実行し、`arena install-skill --force` でインストール済みの skill を更新します。
+
+### checkout なしでインストールする
+
+このパッケージはまだ npm に公開されていません。メンテナが `.tgz` アーカイブを配布している場合（たとえば [GitHub Releases](https://github.com/jacksuzuki/ccc-arena/releases) 経由）は、グローバルにインストールできます。
+
+```bash
+npm install -g ./ccc-arena-0.1.0.tgz
+arena install-skill
+```
+
+アーカイブからのインストールでは checkout もローカルでの TypeScript ビルドも不要です。GitHub から直接インストールする方法（`npm install -g github:jacksuzuki/ccc-arena`）は**動きません**。npm が devDependencies なしで `prepare` のビルドを実行するため `tsc` が見つからないからです。clone かアーカイブを使ってください。候補の実装は git worktree を使うので、arena の実行には引き続き git が必要です。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。
+
+`arena install-skill` は同梱の skill を `~/.claude/skills/arena/SKILL.md` にコピーします。symlink もリポジトリのパスも不要です。インストール後は Claude Code を再起動してください。`CLAUDE_CONFIG_DIR` を尊重し、`arena install-skill --config-dir /path/to/claude-config` でも指定できます。繰り返し実行しても安全で、同一内容なら何もせず、内容が異なる場合は `--force` を付けない限り既存のものを保持します。アップグレード後の skill 更新や、以前の checkout ベースの symlink を置き換えるときは `--force` を使います。
+
+npm に公開された後は `npm install -g ccc-arena` も使えるようになります。その時点で、グローバルインストールなしに CLI を実行することもできます。
+
+```bash
+npx --package ccc-arena arena doctor
+npx --package ccc-arena arena run --players claude,codex --task "Add rate limiting"
+```
+
+Claude Code の skill は PATH 上の `arena` を呼ぶので、`/arena` を使うにはグローバルインストールしてください。
+
+更新するには、新しいパッケージ/バージョンでグローバルインストールのコマンドを再実行し、`arena install-skill --force` を実行します。アンインストールは `npm uninstall -g ccc-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。
+
+## ホストモデルの推奨
+
+`/arena` のホストは判断の重い仕事を担います。依頼を仕様に洗練し、runner の主張を検証し、最終版を仕上げる工程です。ホストは Mythos クラスのモデル（Fable 5.1）を effort **high** 以上で動かしてください。**最低ラインは Opus 5 の medium** です。runner のモデルは独立に選べるので、安価なものでも構いません。
+
+`arena doctor` は Claude Code 内で動作中のホスト（セッションの transcript と `CLAUDE_EFFORT`）を検知し、基準未満なら `⚠` の警告を表示します。skill は開始前にその警告を伝えます。
+
+```
+host
+  harness    Claude Code (session c8e40442)
+  model      claude-fable-5-1  [session transcript]
+  effort     high  [CLAUDE_EFFORT]
+```
+
+Claude Code の外ではホストは「未検知」と報告され、警告は出ません。
+
+## Claude Code から使う
+
+任意の git リポジトリで:
+
+```
+/arena 自前のセッション処理を Better Auth に置き換えて
+```
+
+Claude Code は Player 1 / Player 2 を尋ねたあと、何かを起動する前に**タスクを洗練**します。依頼が触れるコードを読み、runner が推測せざるを得ない点（範囲、対象ファイル、エッジケース、命名、互換性、テスト）を洗い出し、自分で決められない点だけをあなたに質問し、仕様（目的、範囲、要件、受け入れ条件、制約、検証、決定事項）を書きます。あなたが承認または編集してから、両プレイヤーがその仕様を持って隔離された worktree で起動されます。runner はヘッドレスで質問できないため、この工程が「2者が別々の推測をする」ことを防ぎます。元の依頼はセッションに保存され、`arena compare` で仕様と並べて表示されます。
+
+洗練を省くには、コマンドラインで先に **simple モード**を選びます。文面はそのまま runner に渡されます。
+
+```
+/arena task --simple `Session` 型を `ArenaSession` にリネームして
+/arena task-simple `Session` 型を `ArenaSession` にリネームして      # 同じ意味
+```
+
+`/arena task <text>`（または平文）は既定で洗練します。引数なしの `/arena` はプレイヤーと一緒にモードを尋ねます。`.arena.yaml` の `refine: false` でリポジトリの既定を simple モードにでき、`task --refine` は洗練を強制し、`/arena -- <text>` はキーワードで始まる文面をそのまま送ります。洗練中は何も起動されず、worktree が作られる前に仕様の編集やキャンセルができます。確認の段階でモードを再度選ぶことはありません。
+
+runner の完了後、Claude Code は待機し、検証を実行してサマリーを表示し、**必ず先に比較を提示**します。事実、観点ごとの判断、推奨ベース、もう一方の候補の優れた点です。そのうえで次の行動を尋ねます。推奨は **Synthesize**（強い候補をベースにし、その worktree の中でもう一方の長所を取り込み、再検証して候補ブランチにコミット）です。どちらかの候補をそのまま採用することもできます。あなたのブランチへのマージ（`arena adopt`）はあなたが指示したときだけ行われ、push は決して行いません。
+
+## ターミナルから使う
+
+```bash
+arena run --players claude,codex --task "API にレート制限を追加"   # simple モード: 文面をそのまま runner へ
+# あるいは段階的に
+arena start --players claude,codex --task-file task.md
+arena wait latest
+arena collect latest
+arena compare latest        # LLM や人間のレビュアー向け Markdown バンドル
+arena select latest codex
+arena commit latest codex   # worktree の変更を候補ブランチにスナップショット
+arena adopt latest          # 選択したブランチを現在のブランチにマージ (--ff / --squash)
+arena clean latest          # worktree を削除。選択したブランチは残す
+
+# ホストが行う仕上げ工程 (/arena では Claude Code が代行)
+arena synthesize latest codex          # ベースをスナップショット + 選択し、もう一方の diff を表示
+#   ...codex の worktree 内で編集...
+arena collect latest --player codex    # 再検証
+arena commit latest codex -m "arena: synthesis"
+arena finish latest
+```
+
+ターミナルからの洗練（CLI はモデルを呼びません。考えるのはホストか人間です）:
+
+```bash
+arena refine --task "API にレート制限を追加"   # ブリーフ: リポジトリ情報、手順、仕様テンプレート
+                                             # 依頼を ~/.arena/drafts/<id>.original.md に保存
+#   ...仕様を spec.md に書く (コードから決められない点はユーザーに聞く)...
+arena start --players claude,codex --task-file spec.md \
+            --original-task-file ~/.arena/drafts/<id>.original.md   # refined モード: 元の依頼を記録
+```
+
+モードを分けるのは `--original-task` / `--original-task-file` です。指定するとセッションは refined モード（`task` は仕様、`originalTask` は依頼、runner プロンプトには「合意済みの仕様であり、これに従うこと」が付く）になり、指定しなければ simple モードです。`arena doctor --json` はリポジトリの既定（`taskMode`）を報告します。
+
+ディスク上の配置:
+
+```
+~/.arena/
+  sessions/<id>.json                 セッション状態 (task, taskMode, originalTask, players, results …)
+  drafts/<id>.original.md            `arena refine` が保存した依頼
+  <project>/<id>/
+    task.md                          runner に渡した内容
+    task.original.md                 洗練前の依頼 (refined モードのみ)
+    claude/  codex/                  worktree (ブランチ arena/<id>/<player>)
+    logs/<player>.stdout.log …       runner の出力、exit code
+    results/<player>.diff …          diff、status、検証ログ
+```
+
+## 設定
+
+`~/.config/arena/config.yaml`（ユーザー）と `.arena.yaml`（リポジトリ。こちらが優先）。CLI フラグは両方より優先され、`package.json` / `Cargo.toml` / `go.mod` / `pyproject.toml` からの自動検出がフォールバックです。
+
+```yaml
+runners:
+  claude:
+    command: claude
+    model: opus            # 任意
+    extraArgs: []          # 組み込みの起動コマンドに追加
+  codex:
+    command: codex
+  gemini:                  # 任意の CLI を runner にできる
+    command: gemini
+    label: Gemini
+    args: ["--prompt", "{{prompt}}"]   # {{prompt}} {{promptFile}} {{task}} {{cwd}} {{branch}} {{arenaId}}
+    env: { SOME_FLAG: "1" }
+
+verify:
+  test: bun test
+  lint: bun run lint
+  typecheck: false         # false でそのチェックを無効化
+  timeout: 600             # コマンドごとの秒数 (setup にも適用)
+
+setup: npm ci              # runner 起動前に各 worktree で実行
+# setup: [npm ci, npm run codegen]
+# setup: false             # 省略。既定は lockfile からの検出 (npm ci / pnpm / yarn / bun install)
+
+refine: true               # ホストの既定タスクモード: true = 先に洗練, false = simple モード
+```
+
+新しい worktree には追跡ファイルしかないため、`setup` がないと runner と検証は `node_modules` を見つけられません。setup コマンドが失敗すると arena は中断され、その worktree は削除されます（`arena start --no-setup` や `--setup "<cmd>"` で一回限り設定を上書きできます）。
+
+custom runner の `args` が `{{prompt}}` / `{{promptFile}}` を参照しない場合、プロンプトは stdin に渡されます。
+
+## runner の起動方法
+
+両プレイヤーは同じプロンプトを受け取ります。共通の arena ルール（現在の worktree 内だけで作業する、タスクを完遂する、テストを実行する、push しない）に続けてタスクをそのまま渡します。refined モードではタスクはユーザーと合意した仕様で、ルールに「この仕様は確定済み」が加わります。元の依頼はプロンプトに含まれないので、runner が再解釈することはありません。
+
+| Runner | 起動コマンド |
+|---|---|
+| Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'`（プロンプトは stdin） |
+| Codex  | `codex exec -C <worktree> --sandbox workspace-write -c approval_policy="never" -o <results>/codex.last-message.md -` |
+
+ヘッドレス実行では権限の確認に答えられないため、Claude は権限チェックをスキップして動きます。隔離は権限システムではなく専用の worktree によるものです。各 runner は detached な supervisor プロセスに監視され、exit code が記録されるので、`arena` コマンドは終了してあとから戻れます（`arena wait`、`arena status`）。`arena stop` はプロセスグループ全体を終了します。
+
+runner の環境からは `CLAUDECODE` / `CLAUDE_CODE_*` を取り除くので、Claude Code 内から起動した Claude runner が「入れ子」と誤認することはありません。Claude Code の auto-memory はリポジトリ単位なので、worktree 内の runner はそのままではホストプロジェクトのメモリを読み書きしてしまいます。そのため Claude runner は `--settings '{"autoMemoryEnabled":false}'` を渡し、`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` を設定します。
+
+## プロジェクト構成
+
+```
+src/
+  arena.ts            CLI (薄いコマンド層)
+  core.ts             start / wait / stop / collect / select / commit / synthesize / adopt / clean
+  refine.ts           タスク洗練のブリーフ + 仕様テンプレート (質問するのはホスト)
+  host.ts             ホストのモデル/effort 検知と最低基準の警告 (arena doctor)
+  session.ts          JSON セッション状態 (zod スキーマ)
+  config.ts           config.yaml / .arena.yaml
+  git/                repository, worktree, diff
+  runners/            ArenaRunner インターフェース, claude, codex, custom, prompt
+  process/            detached supervisor + spawn ヘルパー
+  verification/       test/lint/typecheck の検出と実行
+  compare/            status, summary, Markdown 比較バンドル
+.claude/skills/arena/SKILL.md   Claude Code ホスト
+```
+
+## 開発
+
+```bash
+npm ci                       # prepare で dist/ をビルド
+npm link                     # 任意: この checkout を `arena` として公開
+npm run typecheck
+npm test
+npm run test:package          # pack し、使い捨ての prefix にインストールして CLI + skill を検証
+npm run dev -- doctor          # ビルドせずソースから実行
+ARENA_HOME=/tmp/arena npm run dev -- run --players a,b --task "..."
+```
+
+## 配布
+
+Node.js と npm が入ったメンテナの checkout で:
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run test:package
+npm pack                     # prepare でビルドし ccc-arena-<version>.tgz を生成
+```
+
+生成した `.tgz` を直接配布するか、リリースに添付します。受け取った側は `npm install -g /path/to/ccc-arena-<version>.tgz` でインストールでき、ソースの checkout や devDependencies は不要です。アーカイブにはコンパイル済み JavaScript と Claude Code の skill が含まれます。実行時依存はインストール時に npm がダウンロードするので、オフラインバンドルではありません。
+
+あるいは、レジストリへのアクセス権を持つメンテナが `npm publish` を実行できます（利用可能なパッケージ名/バージョンを選んでから）。`prepublishOnly` フックが公開前に typecheck、ユニットテスト、パッケージのスモークテストを実行します。このリポジトリは自動公開しません。
+
+## v0.1 に含まれないもの
+
+勝者の自動決定、相互レビュー、3体以上のプレイヤー、トーナメント、クラウド実行、Web UI、Superset/Orca アダプタ、MCP、PR 作成、自動マージ、コスト計測。
+
+## ライセンス
+
+[MIT](LICENSE) — Copyright (c) 2026 Shuichi Suzuki.

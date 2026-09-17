@@ -1,5 +1,7 @@
 # ccc-arena
 
+**English** | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+
 Run two coding agents on the **same task** in **separate git worktrees**, then compare what they
 produced: diff stats, tests, lint, typecheck — and pick the one you want.
 
