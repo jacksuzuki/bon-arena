@@ -92,6 +92,20 @@ export const SessionSchema = z.object({
   startedAt: z.string(),
   finishedAt: z.string().optional(),
   selected: z.string().nullable().default(null),
+  /** Host-driven finishing pass: winner used as the base, other candidates' strengths folded in. */
+  synthesis: z
+    .object({
+      base: z.string(),
+      startedAt: z.string(),
+      snapshotCommit: z.string().nullable(),
+      finishedAt: z.string().optional(),
+      commit: z.string().optional(),
+    })
+    .optional(),
+  /** Recorded when the selected branch was merged into the base branch via `arena adopt`. */
+  adopted: z
+    .object({ player: z.string(), mode: z.enum(["merge", "ff", "squash"]), commit: z.string(), at: z.string() })
+    .optional(),
 })
 export type Session = z.infer<typeof SessionSchema>
 

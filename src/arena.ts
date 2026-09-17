@@ -7,8 +7,11 @@ import { readFileSync, existsSync } from "node:fs"
 import { parseArgs } from "node:util"
 import { resolve } from "node:path"
 import {
+  adoptCandidate,
   checkRunners,
   cleanArena,
+  finishSynthesis,
+  startSynthesis,
   collectResults,
   commitCandidate,
   isSessionActive,
@@ -18,7 +21,7 @@ import {
   stopArena,
   waitForArena,
 } from "./core.ts"
-import { renderCompareBundle, renderStatus, renderSummary, formatDuration, playerDurationMs } from "./compare/summary.ts"
+import { renderCompareBundle, renderStatus, renderSummary, renderSynthesisBrief, formatDuration, playerDurationMs } from "./compare/summary.ts"
 import { findPlayer, listSessions, resolveSessionId, type Session } from "./session.ts"
 import { inspectRepository } from "./git/repository.ts"
 import { resolveSetupCommands, resolveVerifyCommands } from "./verification/detect.ts"
@@ -45,6 +48,10 @@ Usage:
   arena logs <id|latest> <player> [--stderr]        Print a runner's output log
   arena select <id|latest> <player|none>            Record the adopted candidate and print its branch
   arena commit <id|latest> <player> [-m <msg>]      Commit the candidate worktree onto its branch
+  arena synthesize <id|latest> <winner>             Start the finishing pass: snapshot + select the winner, print a brief
+                                                    with the other candidates' diffs (host edits the winner's worktree)
+  arena finish <id|latest>                          Record the synthesis as finished (after arena commit)
+  arena adopt <id|latest> [--ff|--squash] [-m <msg>] Merge the selected branch into the current (base) branch. Never pushes.
   arena run --task <text> [--players ...]           start + wait + collect + summary (foreground, Ctrl+C stops runners)
   arena list [--json]                               List sessions
   arena inspect <id|latest>                         Print the session JSON
@@ -340,7 +347,7 @@ function cmdSelect(argv: Argv): void {
   print(`Selected: ${p.label}\n\nBranch:\n${p.branch}\n\nWorktree:\n${p.worktree}\n`)
   const uncommitted = p.result ? p.result.git.changedFiles > 0 && p.result.git.commits === 0 : true
   if (uncommitted) print(`Changes are in the worktree only. To make the branch self-contained:\n  arena commit ${session.id} ${p.id}`)
-  print(`Then bring it into your branch manually, e.g.:\n  git merge ${p.branch}   # or: git cherry-pick / git diff ${session.baseCommit.slice(0, 12)} ${p.branch} | git apply`)
+  print(`Merge when ready (never automatic):\n  arena adopt ${session.id}   # or: git merge ${p.branch}`)
 }
 
 function cmdCommit(argv: Argv): void {
@@ -350,6 +357,41 @@ function cmdCommit(argv: Argv): void {
   if (!ref) fail("player required")
   const r = commitCandidate(id, ref, values.message)
   print(r.committed ? `Committed ${r.player.label} candidate as ${r.commit?.slice(0, 12)} on ${r.player.branch}` : `Nothing to commit for ${r.player.label} (HEAD ${r.commit?.slice(0, 12)})`)
+}
+
+function cmdSynthesize(argv: Argv): void {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" }, "max-diff-bytes": { type: "string" } } })
+  const id = sessionArg(positionals)
+  const ref = positionals[1]
+  if (!ref) fail("winner player required")
+  const r = startSynthesis(id, ref)
+  if (values.json) {
+    jsonOut(r.session)
+    return
+  }
+  print(renderSynthesisBrief(r.session, r.base, r.others, { maxDiffBytes: values["max-diff-bytes"] ? Number(values["max-diff-bytes"]) : undefined }))
+}
+
+function cmdFinish(argv: Argv): void {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } })
+  const session = finishSynthesis(sessionArg(positionals))
+  if (values.json) jsonOut(session)
+  else print(renderSummary(session))
+}
+
+function cmdAdopt(argv: Argv): void {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: { ff: { type: "boolean" }, squash: { type: "boolean" }, message: { type: "string", short: "m" }, json: { type: "boolean" } },
+  })
+  const r = adoptCandidate(sessionArg(positionals), { mode: values.squash ? "squash" : values.ff ? "ff" : "merge", message: values.message })
+  if (values.json) {
+    jsonOut(r.session)
+    return
+  }
+  print(`Adopted ${r.player.label} (${r.mode}) → ${r.commit.slice(0, 12)} on ${r.session.baseBranch ?? "HEAD"}`)
+  print(`Not pushed. Clean up with: arena clean ${r.session.id}`)
 }
 
 function cmdList(argv: Argv): void {
@@ -444,6 +486,13 @@ async function main(): Promise<void> {
         return cmdSelect(rest)
       case "commit":
         return cmdCommit(rest)
+      case "synthesize":
+      case "synth":
+        return cmdSynthesize(rest)
+      case "finish":
+        return cmdFinish(rest)
+      case "adopt":
+        return cmdAdopt(rest)
       case "list":
         return cmdList(rest)
       case "inspect":

@@ -362,6 +362,86 @@ export function commitCandidate(id: string, playerRef: string, message?: string)
   return { player, committed: true, commit: git(player.worktree, ["rev-parse", "HEAD"]).trim() }
 }
 
+export interface SynthesisStart {
+  session: Session
+  base: Player
+  others: Player[]
+}
+
+/**
+ * Begin the finishing pass on the winning candidate: select it, snapshot its worktree onto its
+ * branch (so the host's later edits are a separate commit), and record the synthesis in the session.
+ * The host then edits inside `base.worktree`, re-collects, and commits with `commitCandidate`.
+ */
+export function startSynthesis(id: string, baseRef: string): SynthesisStart {
+  let session = refreshSession(id)
+  const base = findPlayer(session, baseRef)
+  if (base.status === "running" || base.status === "pending") throw new Error(`${base.label} is still ${base.status}`)
+  if (!existsSync(base.worktree)) throw new Error(`Worktree missing for ${base.id}: ${base.worktree}`)
+  const snapshot = commitCandidate(id, base.id, `arena(${session.id}): ${base.label} candidate (snapshot before synthesis)`)
+  session = selectCandidate(id, base.id)
+  session.synthesis = {
+    base: base.id,
+    startedAt: new Date().toISOString(),
+    snapshotCommit: snapshot.commit,
+  }
+  saveSession(session)
+  return { session, base: findPlayer(session, base.id), others: session.players.filter((p) => p.id !== base.id) }
+}
+
+/** Mark the synthesis finished (after the host committed its work with `commitCandidate`). */
+export function finishSynthesis(id: string): Session {
+  const session = refreshSession(id)
+  if (!session.synthesis) throw new Error(`No synthesis in progress for ${id}`)
+  const base = findPlayer(session, session.synthesis.base)
+  const head = gitTry(base.worktree, ["rev-parse", "HEAD"])
+  session.synthesis.finishedAt = new Date().toISOString()
+  session.synthesis.commit = head.exitCode === 0 ? head.stdout.trim() : undefined
+  saveSession(session)
+  return session
+}
+
+export interface AdoptOptions {
+  mode?: "merge" | "ff" | "squash"
+  message?: string
+}
+
+/**
+ * Merge the selected candidate's branch into the repository's current branch.
+ * Refuses on a dirty working tree, when nothing is selected, or when HEAD is not the session's base branch.
+ * Never pushes.
+ */
+export function adoptCandidate(id: string, opts: AdoptOptions = {}): { session: Session; player: Player; commit: string; mode: "merge" | "ff" | "squash" } {
+  const session = refreshSession(id)
+  if (!session.selected) throw new Error(`No candidate selected for ${id}. Run: arena select ${id} <player>`)
+  const player = findPlayer(session, session.selected)
+  const repo = inspectRepository(session.repository)
+  if (repo.dirty) throw new Error(`Repository has uncommitted changes; commit or stash them before adopting`)
+  if (session.baseBranch && repo.branch !== session.baseBranch) {
+    throw new Error(`Repository is on "${repo.branch ?? "(detached)"}" but the arena started from "${session.baseBranch}". Check out ${session.baseBranch} first.`)
+  }
+  if (existsSync(player.worktree)) {
+    const pending = gitTry(player.worktree, ["status", "--porcelain"])
+    if (pending.stdout.trim()) throw new Error(`${player.label} worktree has uncommitted changes. Run: arena commit ${id} ${player.id}`)
+  }
+  const mode = opts.mode ?? "merge"
+  const message = opts.message ?? `arena(${session.id}): adopt ${player.label}
+
+Task: ${session.task.split("\n")[0]}`
+  if (mode === "squash") {
+    git(repo.root, ["merge", "--squash", player.branch])
+    git(repo.root, ["commit", "--quiet", "--no-verify", "-m", message])
+  } else if (mode === "ff") {
+    git(repo.root, ["merge", "--ff-only", player.branch])
+  } else {
+    git(repo.root, ["merge", "--no-ff", "--no-edit", "-m", message, player.branch])
+  }
+  const commit = git(repo.root, ["rev-parse", "HEAD"]).trim()
+  session.adopted = { player: player.id, mode, commit, at: new Date().toISOString() }
+  saveSession(session)
+  return { session, player, commit, mode }
+}
+
 export interface CleanOptions {
   /** Delete branches too (default true). The selected candidate's branch is always kept unless force. */
   deleteBranches?: boolean

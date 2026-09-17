@@ -87,3 +87,19 @@ test("renderCompareBundle includes task, criteria and per-candidate sections", (
   assert.match(out, /- lint: FAIL \(exit 1\)/)
   assert.match(out, /## Candidate: Codex \(codex\)\n\n(.*\n)*- results: not collected/)
 })
+
+import { renderSynthesisBrief } from "../src/compare/summary.ts"
+
+test("renderSynthesisBrief names the base worktree and includes the other candidate", () => {
+  const withSynthesis: Session = { ...session, synthesis: { base: "claude", startedAt: "2026-09-17T00:08:00.000Z", snapshotCommit: "abcdef123456789" } }
+  const out = renderSynthesisBrief(withSynthesis, session.players[0]!, [session.players[1]!])
+  assert.match(out, /Base candidate: Claude \(claude\)/)
+  assert.match(out, /Work in:\s+\/wt\/claude/)
+  assert.match(out, /snapshot abcdef123456/)
+  assert.match(out, /arena collect 20260917-abc123 --player claude/)
+  assert.match(out, /## Other candidate: Codex \(codex\)/)
+  assert.match(out, /- results: not collected/)
+  const summary = renderSummary({ ...withSynthesis, adopted: { player: "claude", mode: "merge", commit: "fedcba987654321", at: "x" } })
+  assert.match(summary, /Synthesis: base claude \(in progress\)/)
+  assert.match(summary, /Adopted: claude via merge → fedcba987654/)
+})

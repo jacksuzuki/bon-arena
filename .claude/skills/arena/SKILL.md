@@ -16,9 +16,11 @@ task, launch, report progress, and help the user compare and decide. Never re-im
   missing, ask the user to install the ccc-arena package globally (`npm install -g ccc-arena`
   for a published release, or `npm install -g /path/to/ccc-arena-<version>.tgz` for a release archive)
   and check that the npm global bin directory is in PATH.
-- Never edit files inside an arena worktree yourself and never `cd` into one to "help" a runner.
-- Never merge, cherry-pick, push, or delete branches on the user's behalf. Present branch names; the
-  user integrates the winner. Cleaning is destructive: confirm first.
+- Never edit files inside an arena worktree while runners are working, and never `cd` into one to
+  "help" a runner. The only exception is the Synthesize step below, on the selected base candidate's
+  worktree, after every runner has finished.
+- Never push, and never merge, cherry-pick or delete branches without an explicit user decision.
+  `arena adopt` merges only after the user says so. Cleaning is destructive: confirm first.
 - Runners are already running with auto-approval inside their own worktrees. Do not start extra ones.
 - Session ids look like `20260917-abc123`. `latest` is accepted everywhere.
 
@@ -89,32 +91,64 @@ show the last lines of `arena logs <id> <player> --stderr --tail 40`.
 
 ### 6. What next?
 
-Ask with AskUserQuestion:
+Ask with AskUserQuestion, in this order (the first option is the default):
 
-- Compare implementations
+- **Synthesize (Recommended)** — compare, take the stronger candidate as the base, fold in the
+  other's strengths, and finish the implementation yourself
+- Compare only (review, then let the user pick a candidate as is)
 - Inspect <Player 1> diff
 - Inspect <Player 2> diff
-- Keep both
-- Clean arena
 
-**Compare implementations**: run `arena compare <id>` and review the bundle it prints. Judge both
-candidates on: correctness, task completeness, regression risk, architecture fit, code complexity,
-adherence to existing conventions, test quality, unnecessary changes. You may read files inside the
-worktrees (read-only) for context. Write a concise comparison: a short table of facts, then per
-criterion which candidate is stronger and why, then a recommendation. The user decides. Then ask
-"Select candidate?" with options <Player 1> / <Player 2> / None.
+Mention that "Keep both" and "Clean arena" are also available if the user asks.
 
-**Inspect diff**: run `arena diff <id> <player>` and walk the user through it.
+**Compare** (used by both of the first two options): run `arena compare <id>` and review the
+bundle it prints. Judge both candidates on: correctness, task completeness, regression risk,
+architecture fit, code complexity, adherence to existing conventions, test quality, unnecessary
+changes. Do not trust the runners' own claims: read files inside the worktrees (read-only) and, when
+a claim matters (e.g. "installs cleanly", "works after X"), actually try it on a copy of the
+worktree in a temp dir. Write a concise comparison: a short table of facts, per criterion which
+candidate is stronger and why, then name the recommended base **and list the concrete strengths of
+the other candidate worth folding in** (specific files, functions, tests, docs).
+
+**Compare only**: after the comparison ask "Select candidate?" with <Player 1> / <Player 2> / None,
+then go to step 8.
+
+**Inspect diff**: run `arena diff <id> <player>` and walk the user through it, then return to this
+question.
 
 **Keep both**: print both branch names and worktree paths and stop.
 
 **Clean arena**: confirm ("removes worktrees and unselected branches"), then `arena clean <id>`.
 
-### 7. Select
+### 7. Synthesize
 
-`arena select <id> <player>` records the choice and prints the branch. Relay its output. If the
-changes are uncommitted, offer `arena commit <id> <player>` so the branch is self-contained. Do not
-merge. Finally offer to clean the arena (the selected branch is kept).
+1. After the comparison, confirm the base with AskUserQuestion: "Base candidate?" — recommended
+   candidate first, the other second, "Stop here" third.
+2. Run `arena synthesize <id> <base>`. It snapshots the base candidate onto its branch, selects it,
+   and prints a brief with the other candidate's diff. Relay the worktree path and the list of
+   strengths you are about to fold in.
+3. Work **inside the base candidate's worktree** (the path from the brief; use absolute paths, do
+   not touch the user's main checkout). Keep the base's structure. Port the other candidate's
+   strengths deliberately: take ideas, tests, docs and edge-case handling, not wholesale files.
+   Fix defects you found in the comparison. Then polish: remove leftovers, unify naming, update
+   README/docs so they describe the combined result.
+4. Re-verify with `arena collect <id> --player <base>`; test / lint / typecheck must pass. If you
+   cannot make them pass, say so and stop before committing.
+5. Commit with `arena commit <id> <base> -m "arena(<id>): synthesis — <one line>"` and run
+   `arena finish <id>`.
+6. Summarize what the final version contains: what came from the base, what was folded in from
+   the other candidate, what you changed yourself. Then go to step 8.
+
+### 8. Integrate
+
+Ask with AskUserQuestion: "Merge into <base branch> now?" with options
+"Merge (arena adopt)" / "Squash merge" / "Not now, keep the branch".
+
+- Merge: `arena adopt <id>` (or `--squash`). It refuses if the checkout is dirty or on a different
+  branch; relay the message and let the user fix it. It never pushes.
+- Not now: print the branch name and worktree path.
+
+Finally offer to clean the arena (`arena clean <id>`, the selected branch is kept).
 
 ## Reference
 
@@ -126,6 +160,7 @@ arena collect <id> [--no-verify] [--test <cmd>|false] [--lint ...] [--typecheck 
 arena compare <id> [--max-diff-bytes <n>]
 arena diff <id> <player>        arena logs <id> <player> [--stderr] [--tail n]
 arena select <id> <player|none> arena commit <id> <player> [-m msg]
+arena synthesize <id> <base>    arena finish <id>        arena adopt <id> [--ff|--squash]
 arena list [--all]              arena clean <id> [--keep-branches] [--force]
 ```
 

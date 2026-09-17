@@ -73,8 +73,11 @@ In any git repository:
 ```
 
 Claude Code asks for Player 1 / Player 2, launches both in isolated worktrees, waits, runs
-verification, shows a summary, and offers *Compare / Inspect diff / Keep both / Clean*. Selecting a
-candidate prints its branch. Nothing is merged or pushed automatically.
+verification and shows a summary. The recommended next step is **Synthesize**: Claude Code compares
+the candidates, takes the stronger one as the base, folds in the other's strengths inside that
+candidate's worktree, re-runs verification, and commits the result on the candidate branch. You can
+also just pick one candidate as is. Merging into your branch (`arena adopt`) happens only when you
+say so, and nothing is ever pushed.
 
 ## Use from a terminal
 
@@ -87,7 +90,15 @@ arena collect latest
 arena compare latest        # markdown bundle for an LLM or human reviewer
 arena select latest codex
 arena commit latest codex   # snapshot worktree changes onto the candidate branch
+arena adopt latest          # merge the selected branch into the current branch (--ff / --squash)
 arena clean latest          # removes worktrees; keeps the selected branch
+
+# finishing pass driven by a host (Claude Code does this for you in /arena)
+arena synthesize latest codex          # snapshot + select the base, print the other candidate's diff
+#   ...edit inside the codex worktree...
+arena collect latest --player codex    # re-verify
+arena commit latest codex -m "arena: synthesis"
+arena finish latest
 ```
 
 Layout on disk:
@@ -164,7 +175,7 @@ memory; the Claude runner therefore passes `--settings '{"autoMemoryEnabled":fal
 ```
 src/
   arena.ts            CLI (thin command surface)
-  core.ts             start / wait / stop / collect / select / commit / clean
+  core.ts             start / wait / stop / collect / select / commit / synthesize / adopt / clean
   session.ts          JSON session state (zod schema)
   config.ts           config.yaml / .arena.yaml
   git/                repository, worktree, diff
