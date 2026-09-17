@@ -183,6 +183,23 @@ refine: true               # 宿主的默认任务模式：true = 先提炼需�
 
 如果自定义 runner 的 `args` 没有引用 `{{prompt}}` / `{{promptFile}}`，提示词会通过 stdin 传入。 `askArgs` 也一样，且只有自定义 runner 需要它；未设置时 `arena ask` 会报告该 runner 无法恢复会话。
 
+## 工作区应用集成 (Orca)
+
+Arena 仍是独立的 CLI，但在 [Orca](https://github.com/stablyai/orca) 中运行时会把候选同步到 Orca。
+Orca 会自动发现已注册仓库的 worktree，Arena 只负责补充元数据：每个候选在侧边栏显示为
+`arena <id> · <标签>`，附带状态行（`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`），
+看板列随状态移动（运行中 → in-progress，完成 → in-review，已采用 → completed），并归在启动 arena 的
+worktree 之下。`arena clean` 删除 worktree 后，Orca 中也随之消失。
+
+```bash
+arena doctor            # “workspace apps” 显示集成是否生效
+arena open latest codex # 在 Orca 中以 diff 方式打开候选的改动文件
+```
+
+配置项为 `integrations.orca: auto | true | false`（默认 `auto` = 仅在 Orca 内运行时启用）。该集成只负责展示，
+且为 best effort：runner 仍由 Arena 以 headless 方式启动，`arena ask` / `arena review` 与 runner 隔离不受影响；
+`orca` CLI 缺失或失败时只会输出警告。Superset 无法显示非自身创建的 worktree，因此暂无 Superset 集成。
+
 ## runner 的启动方式
 
 两个玩家收到相同的提示词：共享的 arena 规则（只在当前 worktree 内工作、完整完成任务、运行测试、不要 push），然后是原样的任务。在 refined 模式下，任务就是与用户商定的规格，规则中会补充说明它是权威的：原始需求不在提示词中，因此 runner 无法重新解释它。
@@ -263,7 +280,7 @@ npm pack                     # 生成 bon-arena-<version>.tgz
 
 ## v0.1 不包含
 
-自动判定胜者、交叉评审、3 个以上玩家、锦标赛、云端执行、Web UI、Superset/Orca 适配器、MCP、创建 PR、自动合并、成本统计。
+自动判定胜者、交叉评审、3 个以上玩家、锦标赛、云端执行、Web UI、Superset 适配器、将 runner 执行委托给 Orca、MCP、创建 PR、自动合并、成本统计。
 
 ## 许可证
 

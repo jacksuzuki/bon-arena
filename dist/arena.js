@@ -16,6 +16,7 @@ import { sessionFile } from "./paths.js";
 import { installSkill } from "./install.js";
 import { buildRefineContext, defaultTaskMode, renderRefineBrief } from "./refine.js";
 import { describeHost, detectHost } from "./host.js";
+import { createIntegrations, integrationStatuses, syncIntegrations } from "./integrations/index.js";
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
 
 Usage:
@@ -52,6 +53,8 @@ Usage:
   arena finish <id|latest>                          Record the synthesis as finished (after arena commit)
   arena adopt <id|latest> [--ff|--squash] [-m <msg>] Merge the selected branch into the current (base) branch. Never pushes.
   arena run --task <text> [--players ...]           start + wait + collect + summary (foreground, Ctrl+C stops runners)
+  arena open <id|latest> [player]                   Show a candidate's changed files in the workspace app (Orca); default: the
+                                                    selected candidate, else every candidate
   arena list [--json]                               List sessions
   arena inspect <id|latest>                         Print the session JSON
   arena clean <id|latest> [--keep-branches] [--force]
@@ -134,6 +137,15 @@ function sessionArg(positionals, index = 0) {
 function jsonOut(session) {
     print(JSON.stringify(session, null, 2));
 }
+/** Mirror the session into active workspace apps (Orca). Display-only and best effort: never fails a command. */
+async function mirror(session, retries = 0) {
+    try {
+        await syncIntegrations(session, loadConfig(session.repository), { retries, log: (l) => process.stderr.write(`${l}\n`) });
+    }
+    catch (err) {
+        process.stderr.write(`warning: workspace integrations skipped: ${err.message}\n`);
+    }
+}
 function cmdInstallSkill(argv) {
     const { values } = parseArgs({
         args: argv,
@@ -163,8 +175,9 @@ async function cmdDoctor(argv) {
     const setup = repoInfo ? resolveSetupCommands(root, loadConfig(root).setup, undefined) : [];
     const taskMode = defaultTaskMode(root);
     const host = detectHost(root);
+    const integrations = integrationStatuses(loadConfig(root));
     if (values.json) {
-        print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup, taskMode, refine: taskMode === "refined", host }, null, 2));
+        print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup, taskMode, refine: taskMode === "refined", host, integrations }, null, 2));
         return;
     }
     print("Arena doctor");
@@ -194,6 +207,10 @@ async function cmdDoctor(argv) {
     print("host");
     for (const line of describeHost(host))
         print(`  ${line}`);
+    print("");
+    print("workspace apps");
+    for (const i of integrations)
+        print(`  ${i.id.padEnd(10)} ${i.active ? "✓" : "–"} ${i.detail}`);
     const missing = runners.filter((r) => !r.available && (r.id === "claude" || r.id === "codex"));
     if (missing.length)
         process.exitCode = 1;
@@ -247,6 +264,7 @@ async function cmdStart(argv) {
         setup: values["no-setup"] ? false : values.setup,
         log: (l) => process.stderr.write(`${l}\n`),
     });
+    await mirror(session, 3); // Orca needs a moment to discover the new worktrees
     if (values.json) {
         jsonOut(session);
     }
@@ -276,6 +294,7 @@ async function cmdWait(argv) {
     });
     const id = sessionArg(positionals);
     const session = await waitProgress(id, values.timeout ? Number(values.timeout) * 1000 : undefined, values.quiet ? undefined : (values.interval ? Number(values.interval) : 30) * 1000, false);
+    await mirror(session);
     if (values.json)
         jsonOut(session);
     else
@@ -312,9 +331,10 @@ async function waitProgress(id, timeoutMs, progressEveryMs, stopOnSigint) {
     }
     return session;
 }
-function cmdStop(argv) {
+async function cmdStop(argv) {
     const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } });
     const session = stopArena(sessionArg(positionals));
+    await mirror(session);
     if (values.json)
         jsonOut(session);
     else
@@ -342,6 +362,7 @@ async function cmdCollect(argv) {
         timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
         log: (l) => process.stderr.write(`${l}\n`),
     });
+    await mirror(session);
     if (values.json)
         jsonOut(session);
     else
@@ -494,13 +515,14 @@ async function cmdReview(argv) {
     if (r.round.entries.every((e) => e.error || e.timedOut || !r.answers[e.player]?.trim()))
         process.exitCode = 1;
 }
-function cmdSelect(argv) {
+async function cmdSelect(argv) {
     const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } });
     const id = sessionArg(positionals);
     const ref = positionals[1];
     if (!ref)
         fail("player required (or 'none')");
     const session = selectCandidate(id, ref.toLowerCase() === "none" ? null : ref);
+    await mirror(session);
     if (values.json) {
         jsonOut(session);
         return;
@@ -525,40 +547,60 @@ function cmdCommit(argv) {
     const r = commitCandidate(id, ref, values.message);
     print(r.committed ? `Committed ${r.player.label} candidate as ${r.commit?.slice(0, 12)} on ${r.player.branch}` : `Nothing to commit for ${r.player.label} (HEAD ${r.commit?.slice(0, 12)})`);
 }
-function cmdSynthesize(argv) {
+async function cmdSynthesize(argv) {
     const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" }, "max-diff-bytes": { type: "string" } } });
     const id = sessionArg(positionals);
     const ref = positionals[1];
     if (!ref)
         fail("winner player required");
     const r = startSynthesis(id, ref);
+    await mirror(r.session);
     if (values.json) {
         jsonOut(r.session);
         return;
     }
     print(renderSynthesisBrief(r.session, r.base, r.others, { maxDiffBytes: values["max-diff-bytes"] ? Number(values["max-diff-bytes"]) : undefined }));
 }
-function cmdFinish(argv) {
+async function cmdFinish(argv) {
     const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { json: { type: "boolean" } } });
     const session = finishSynthesis(sessionArg(positionals));
+    await mirror(session);
     if (values.json)
         jsonOut(session);
     else
         print(renderSummary(session));
 }
-function cmdAdopt(argv) {
+async function cmdAdopt(argv) {
     const { values, positionals } = parseArgs({
         args: argv,
         allowPositionals: true,
         options: { ff: { type: "boolean" }, squash: { type: "boolean" }, message: { type: "string", short: "m" }, json: { type: "boolean" } },
     });
     const r = adoptCandidate(sessionArg(positionals), { mode: values.squash ? "squash" : values.ff ? "ff" : "merge", message: values.message });
+    await mirror(r.session);
     if (values.json) {
         jsonOut(r.session);
         return;
     }
     print(`Adopted ${r.player.label} (${r.mode}) → ${r.commit.slice(0, 12)} on ${r.session.baseBranch ?? "HEAD"}`);
     print(`Not pushed. Clean up with: arena clean ${r.session.id}`);
+}
+function cmdOpen(argv) {
+    const { positionals } = parseArgs({ args: argv, allowPositionals: true, options: {} });
+    const session = refreshSession(sessionArg(positionals));
+    if (session.status === "cleaned")
+        fail(`arena ${session.id} is cleaned; its worktrees are gone`);
+    const ref = positionals[1] ?? session.selected ?? undefined;
+    const players = ref ? [findPlayer(session, ref)] : session.players;
+    const apps = createIntegrations(loadConfig(session.repository)).filter((i) => i.status().available);
+    if (!apps.length)
+        fail("no workspace app CLI found (supported: orca). Worktrees:\n" + players.map((p) => `  ${p.worktree}`).join("\n"));
+    for (const app of apps) {
+        for (const p of players) {
+            app.open(session, p);
+            print(`Opened ${p.label} in ${app.label}: ${p.worktree}`);
+        }
+    }
 }
 function cmdList(argv) {
     const { values } = parseArgs({ args: argv, options: { json: { type: "boolean" }, all: { type: "boolean" } } });
@@ -609,6 +651,7 @@ async function cmdRun(argv) {
         return;
     }
     const collected = await collectResults(session.id, { log: (l) => process.stderr.write(`${l}\n`) });
+    await mirror(collected);
     process.stderr.write("\n");
     print(renderSummary(collected));
     print(`\nNext: arena compare ${session.id} | arena select ${session.id} <player> | arena clean ${session.id}`);
@@ -637,7 +680,7 @@ async function main() {
             case "wait":
                 return await cmdWait(rest);
             case "stop":
-                return cmdStop(rest);
+                return await cmdStop(rest);
             case "collect":
                 await cmdCollect(rest);
                 return;
@@ -654,16 +697,18 @@ async function main() {
             case "review":
                 return await cmdReview(rest);
             case "select":
-                return cmdSelect(rest);
+                return await cmdSelect(rest);
             case "commit":
                 return cmdCommit(rest);
             case "synthesize":
             case "synth":
-                return cmdSynthesize(rest);
+                return await cmdSynthesize(rest);
             case "finish":
-                return cmdFinish(rest);
+                return await cmdFinish(rest);
             case "adopt":
-                return cmdAdopt(rest);
+                return await cmdAdopt(rest);
+            case "open":
+                return cmdOpen(rest);
             case "list":
                 return cmdList(rest);
             case "inspect":

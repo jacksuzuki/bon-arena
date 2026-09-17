@@ -27,6 +27,13 @@ const VerifyConfigSchema = z.object({
 });
 /** Commands run inside each fresh worktree before runners start (e.g. `npm ci`). `false` disables auto-detection. */
 const SetupConfigSchema = z.union([z.string(), z.array(z.string()), z.literal(false)]).optional();
+/**
+ * Workspace apps that mirror arena sessions. "auto" (default): only while Arena runs inside the app;
+ * true: whenever its CLI is installed; false: never.
+ */
+const IntegrationsConfigSchema = z.object({
+    orca: z.union([z.literal("auto"), z.boolean()]).default("auto"),
+});
 export const ArenaConfigSchema = z.object({
     runners: z.record(z.string(), RunnerConfigSchema).default({}),
     verify: VerifyConfigSchema.default({}),
@@ -36,7 +43,15 @@ export const ArenaConfigSchema = z.object({
      * (default true). `false` makes simple mode (task passed verbatim) the default.
      */
     refine: z.boolean().optional(),
+    integrations: IntegrationsConfigSchema.default({ orca: "auto" }),
 });
+/** Raw `integrations` keys of a config file, so an unset key does not override the other file with its default. */
+function readIntegrationKeys(path) {
+    if (!existsSync(path))
+        return {};
+    const raw = YAML.parse(readFileSync(path, "utf8")) ?? {};
+    return typeof raw.integrations === "object" && raw.integrations !== null ? raw.integrations : {};
+}
 function readConfigFile(path) {
     if (!existsSync(path))
         return null;
@@ -53,9 +68,8 @@ function readConfigFile(path) {
  */
 export function loadConfig(repoPath) {
     const user = readConfigFile(userConfigFile()) ?? ArenaConfigSchema.parse({});
-    const repo = readConfigFile(join(repoPath, ".arena.yaml")) ??
-        readConfigFile(join(repoPath, ".arena.yml")) ??
-        ArenaConfigSchema.parse({});
+    const repoFile = [".arena.yaml", ".arena.yml"].map((f) => join(repoPath, f)).find((f) => existsSync(f));
+    const repo = (repoFile ? readConfigFile(repoFile) : null) ?? ArenaConfigSchema.parse({});
     const runners = { ...user.runners };
     for (const [id, cfg] of Object.entries(repo.runners)) {
         runners[id] = { ...(runners[id] ?? {}), ...cfg };
@@ -65,5 +79,6 @@ export function loadConfig(repoPath) {
         verify: { ...user.verify, ...repo.verify },
         setup: repo.setup !== undefined ? repo.setup : user.setup,
         refine: repo.refine !== undefined ? repo.refine : user.refine,
+        integrations: IntegrationsConfigSchema.parse({ ...readIntegrationKeys(userConfigFile()), ...(repoFile ? readIntegrationKeys(repoFile) : {}) }),
     };
 }

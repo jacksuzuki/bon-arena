@@ -183,6 +183,25 @@ refine: true               # ホストの既定タスクモード: true = 先に
 
 custom runner の `args` が `{{prompt}}` / `{{promptFile}}` を参照しない場合、プロンプトは stdin に渡されます。`askArgs` も同様で、custom runner にだけ必要です。未設定なら `arena ask` は「この runner は会話を再開できない」と報告します。
 
+## ワークスペースアプリ連携 (Orca)
+
+Arena は単体の CLI のままですが、[Orca](https://github.com/stablyai/orca) の中で動かすと候補を Orca 上に反映します。
+Orca は登録済みリポジトリの worktree を自動検出するので、Arena が行うのはメタデータの付与だけです。
+各候補はサイドバーに `arena <id> · <ラベル>` として並び、状態行
+(`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`) が付き、ボード列が
+実行中 → in-progress、完了 → in-review、採用 → completed と移動し、arena を開始した worktree の子として
+まとまります。`arena clean` で worktree を消せば Orca 側からも消えます。
+
+```bash
+arena doctor            # "workspace apps" に連携が有効かどうかが出る
+arena open latest codex # 候補の変更ファイルを Orca で diff として開く
+```
+
+設定は `integrations.orca: auto | true | false`（既定 `auto` = Orca 内で実行中のみ）。連携は表示専用かつ
+best effort です。runner は従来どおり Arena が headless で起動するため `arena ask` / `arena review` や
+runner の隔離はそのまま機能し、`orca` CLI が無い・失敗した場合も警告が出るだけです。Superset は自分で
+作っていない worktree を表示する手段がないため、Superset 連携はまだありません。
+
 ## runner の起動方法
 
 両プレイヤーは同じプロンプトを受け取ります。共通の arena ルール（現在の worktree 内だけで作業する、タスクを完遂する、テストを実行する、push しない）に続けてタスクをそのまま渡します。refined モードではタスクはユーザーと合意した仕様で、ルールに「この仕様は確定済み」が加わります。元の依頼はプロンプトに含まれないので、runner が再解釈することはありません。
@@ -263,7 +282,7 @@ npm pack                     # bon-arena-<version>.tgz を生成
 
 ## v0.1 に含まれないもの
 
-勝者の自動決定、相互レビュー、3体以上のプレイヤー、トーナメント、クラウド実行、Web UI、Superset/Orca アダプタ、MCP、PR 作成、自動マージ、コスト計測。
+勝者の自動決定、相互レビュー、3体以上のプレイヤー、トーナメント、クラウド実行、Web UI、Superset アダプタ、Orca への runner 実行委譲、MCP、PR 作成、自動マージ、コスト計測。
 
 ## ライセンス
 

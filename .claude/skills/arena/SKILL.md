@@ -232,6 +232,11 @@ Present a concise comparison to the user:
    (specific files, functions, tests, docs), and whether a plain adoption would already be good
    enough or synthesis adds real value.
 
+When `arena doctor` lists a workspace app as active (Orca), the candidates already appear in its
+sidebar as `arena <id> · <Label>` with their status, grouped under the worktree the arena was
+started from; the CLI keeps that in sync on its own. Mention once that `arena open <id> <player>`
+shows a candidate's changed files as diffs in the app, and run it when the user wants to look.
+
 ### 9. What next?
 
 Only now ask with AskUserQuestion, in this order (the first option is the default):
@@ -342,10 +347,12 @@ arena ask <id> <player> "<question>" [--question-file <f>] [--timeout <sec>]   (
 arena review <id> [--players a,b] [--instructions "<text>"] [--timeout <sec>]  (every runner reviews the selected final version, read-only)
 arena select <id> <player|none> arena commit <id> <player> [-m msg]
 arena synthesize <id> <base>    arena finish <id>        arena adopt <id> [--ff|--squash]
+arena open <id> [player]        (show changed files in the workspace app; Orca)
 arena list [--all]              arena clean <id> [--keep-branches] [--force]
 ```
 
 State lives in `~/.arena/sessions/<id>.json`; worktrees, logs and diffs in
 `~/.arena/<project>/<id>/` (`task.md` is what the runners got, `task.original.md` the request
 before refinement); drafts from `arena refine` in `~/.arena/drafts/`. Repository config:
-`.arena.yaml` (`runners`, `verify`, `setup`, `refine: false` to default to simple mode).
+`.arena.yaml` (`runners`, `verify`, `setup`, `refine: false` to default to simple mode,
+`integrations.orca: auto|true|false`).

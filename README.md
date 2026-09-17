@@ -222,6 +222,9 @@ setup: npm ci              # run in every fresh worktree before the runners star
 # setup: false             # skip; default is lockfile detection (npm ci / pnpm / yarn / bun install)
 
 refine: true               # default task mode for hosts: true = refine the request first, false = simple mode
+
+integrations:
+  orca: auto               # auto = only while running inside Orca; true = whenever the orca CLI exists; false = never
 ```
 
 Fresh worktrees contain only tracked files, so without `setup` the runners and the verification step
@@ -231,6 +234,26 @@ would see no `node_modules`. If a setup command fails, the arena is aborted and 
 If a custom runner's `args` does not reference `{{prompt}}` / `{{promptFile}}`, the prompt is piped
 to stdin. The same applies to `askArgs`, which is only needed for custom runners: without it
 `arena ask` reports that the runner cannot resume its conversation.
+
+## Workspace apps (Orca)
+
+Arena stays a plain CLI, but when it runs inside [Orca](https://github.com/stablyai/orca) it labels
+its candidates there. Orca discovers the worktrees of a registered repository by itself; Arena only
+adds the metadata, so each candidate shows up in the sidebar as `arena <id> · <Label>` with a status
+line (`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`), moves across
+the board columns (running → in-progress, finished → in-review, adopted → completed) and is grouped
+under the worktree the arena was started from. `arena clean` removes the worktrees and Orca drops
+them.
+
+```bash
+arena doctor            # "workspace apps" shows whether the integration is active
+arena open latest codex # open the candidate's changed files as diffs in Orca
+```
+
+The integration is display-only and best effort: runners are still launched headless by Arena (so
+`arena ask` / `arena review`, session pinning and runner isolation keep working), and a missing or
+failing `orca` CLI only prints a warning. Superset has no way to show a worktree it did not create,
+so there is no Superset integration yet.
 
 ## How runners are launched
 
@@ -315,6 +338,7 @@ src/
   process/            detached supervisor + spawn helpers
   verification/       detect + run test/lint/typecheck
   compare/            status, summary, markdown compare bundle
+  integrations/       optional workspace-app mirrors (Orca); display-only, best effort
 .claude/skills/arena/SKILL.md   Claude Code host
 ```
 
@@ -353,7 +377,7 @@ installed with `npm install -g ./bon-arena-<version>.tgz`.
 ## Not in v0.1
 
 Automatic winner selection, cross-review, 3+ players, tournaments, cloud execution, web UI,
-Superset/Orca adapters, MCP, PR creation, automatic merge, cost tracking.
+Superset adapter, delegating runner execution to Orca, MCP, PR creation, automatic merge, cost tracking.
 
 ## License
 
