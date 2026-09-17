@@ -2,3 +2,23 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# Local credentials and environment files (keep sanitized examples shareable).
+.env
+.env.*
+!.env.example
+!.env.*.example
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Local agent state and disposable package/install test artifacts.
+.arena/
+.arena-package-test-*/
+.arena-install-test-*/
+.claude/settings.local.json
+*.tgz

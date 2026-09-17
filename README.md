@@ -23,25 +23,34 @@ other hosts (Codex, standalone use, other harnesses) can drive the same CLI.
 - git
 - Runners you want to race: `claude` (Claude Code CLI) and/or `codex` (Codex CLI) in PATH
 
-## Install (no git clone required)
+## Install
 
-Install a published npm release globally, then install the optional Claude Code skill:
+Clone [jacksuzuki/ccc-arena](https://github.com/jacksuzuki/ccc-arena) and install from source
+(Node.js >= 22.18 and npm):
 
 ```bash
-npm install -g ccc-arena
+git clone https://github.com/jacksuzuki/ccc-arena.git
+cd ccc-arena
+npm ci              # installs dependencies and builds dist/ via prepare
+npm link            # expose this checkout as the arena command
 arena install-skill
 arena doctor         # run in the project you want to work on
 ```
 
-The npm command above requires `ccc-arena` to have been published to your registry. For an
-unpublished build, install a release archive supplied by the maintainer instead:
+Keep the checkout while using `npm link`. After pulling updates, run `npm ci` again and
+`arena install-skill --force` to update the installed skill.
+
+### Install without a checkout
+
+The package is not yet published to npm. If the maintainer supplies a `.tgz` archive (for example,
+through [GitHub Releases](https://github.com/jacksuzuki/ccc-arena/releases)), install it globally:
 
 ```bash
 npm install -g ./ccc-arena-0.1.0.tgz
 arena install-skill
 ```
 
-Both methods provide the `arena` command without a checkout or a local TypeScript build. git is
+The archive provides the `arena` command without a checkout or a local TypeScript build. git is
 still required when running arenas because candidate implementations use git worktrees.
 If `arena` is not found after installation, add the npm global bin directory to PATH
 (`$(npm prefix -g)/bin` on macOS/Linux, `npm prefix -g` on Windows).
@@ -52,7 +61,8 @@ or use `arena install-skill --config-dir /path/to/claude-config`. Repeating it i
 content is left alone, and different content is preserved unless you pass `--force`. Use `--force`
 to update the skill after upgrading or to replace the old checkout-based symlink.
 
-Once an npm release is published, you can also run the CLI without a global installation:
+Once an npm release is published, `npm install -g ccc-arena` will also be available. At that point
+you can run the CLI without a global installation:
 
 ```bash
 npx --package ccc-arena arena doctor
@@ -269,3 +279,7 @@ test before publication. This repository does not publish automatically.
 
 Automatic winner selection, cross-review, 3+ players, tournaments, cloud execution, web UI,
 Superset/Orca adapters, MCP, PR creation, automatic merge, cost tracking.
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Shuichi Suzuki.
