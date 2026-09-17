@@ -1030,7 +1030,8 @@ review
 
 実装状況 (`src/integrations/orca.ts`): 表示のみの連携を実装済み。Orca は登録済みリポジトリの
 git worktree を自動検出するため、Arena は `orca worktree set` で表示名・状態コメント・ボード列・
-親 worktree を付けるだけ。`arena open` は `orca file open-changed --mode diff` を呼ぶ。
+親 worktree を付け、起動直後に `orca terminal create --command 'arena logs … --follow'` で
+各候補にライブ進捗ターミナルを 1 つ開くだけ。`arena open` は `orca file open-changed --mode diff` を呼ぶ。
 runner execution の委譲は行わない（`worktree create --agent` は TUI 起動で任意引数を渡せず、
 `--session-id` 固定・auto-memory 無効化・headless 完了判定が失われ、`arena ask` / `arena review`
 が成立しなくなるため）。連携は CLI 層から best effort で呼び、失敗しても arena は止めない。

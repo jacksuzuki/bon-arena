@@ -250,13 +250,20 @@ its candidates there. Orca discovers the worktrees of a registered repository by
 adds the metadata, so each candidate shows up in the sidebar as `arena <id> · <Label>` with a status
 line (`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`), moves across
 the board columns (running → in-progress, finished → in-review, adopted → completed) and is grouped
-under the worktree the arena was started from. `arena clean` removes the worktrees and Orca drops
+under the worktree the arena was started from. Each candidate also gets a `<Label> (live)` terminal
+that streams the runner's progress (`arena logs <id> <player> --follow`), so clicking a candidate
+shows what it is doing instead of an empty shell. `arena clean` removes the worktrees and Orca drops
 them.
 
 ```bash
 arena doctor            # "workspace apps" shows whether the integration is active
 arena open latest codex # open the candidate's changed files as diffs in Orca
+arena logs latest claude --follow   # the same live view in any terminal
 ```
+
+`--follow` prints a runner's stdout/stderr as it grows. Claude Code prints nothing in print mode until
+it is done, so for Claude the live conversation transcript is shown instead (assistant text and one
+line per tool call).
 
 The integration is display-only and best effort: runners are still launched headless by Arena (so
 `arena ask` / `arena review`, session pinning and runner isolation keep working), and a missing or

@@ -16,6 +16,7 @@ import { sessionFile } from "./paths.js";
 import { installSkill } from "./install.js";
 import { buildRefineContext, defaultTaskMode, renderRefineBrief } from "./refine.js";
 import { describeHost, detectHost } from "./host.js";
+import { followPlayer } from "./follow.js";
 import { createIntegrations, integrationStatuses, syncIntegrations } from "./integrations/index.js";
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
 
@@ -41,7 +42,9 @@ Usage:
   arena summary <id|latest> [--json]                Print the comparison table
   arena compare <id|latest> [--max-diff-bytes <n>]  Print the markdown review bundle for an LLM/human reviewer
   arena diff <id|latest> <player>                   Print a candidate's diff
-  arena logs <id|latest> <player> [--stderr]        Print a runner's output log
+  arena logs <id|latest> <player> [--stderr] [--follow]
+                                                    Print a runner's output log; --follow streams progress until it finishes
+                                                    (for Claude: its live conversation, since print mode is silent until the end)
   arena ask <id|latest> <player> [question] [--question-file <f>] [--timeout <sec>] [--json]
                                                     Resume the finished runner's own conversation inside its worktree with a
                                                     read-only question (Claude session / Codex thread / Antigravity conversation;
@@ -141,9 +144,9 @@ function jsonOut(session) {
     print(JSON.stringify(session, null, 2));
 }
 /** Mirror the session into active workspace apps (Orca). Display-only and best effort: never fails a command. */
-async function mirror(session, retries = 0) {
+async function mirror(session, retries = 0, attach = false) {
     try {
-        await syncIntegrations(session, loadConfig(session.repository), { retries, log: (l) => process.stderr.write(`${l}\n`) });
+        await syncIntegrations(session, loadConfig(session.repository), { retries, attach, log: (l) => process.stderr.write(`${l}\n`) });
     }
     catch (err) {
         process.stderr.write(`warning: workspace integrations skipped: ${err.message}\n`);
@@ -267,7 +270,7 @@ async function cmdStart(argv) {
         setup: values["no-setup"] ? false : values.setup,
         log: (l) => process.stderr.write(`${l}\n`),
     });
-    await mirror(session, 3); // Orca needs a moment to discover the new worktrees
+    await mirror(session, 3, true); // Orca needs a moment to discover the new worktrees
     if (values.json) {
         jsonOut(session);
     }
@@ -400,13 +403,17 @@ function cmdDiff(argv) {
         fail(`results not collected for ${player.id}; run: arena collect ${session.id}`);
     process.stdout.write(readFileSync(player.result.git.diffPath, "utf8"));
 }
-function cmdLogs(argv) {
-    const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { stderr: { type: "boolean" }, tail: { type: "string" } } });
+async function cmdLogs(argv) {
+    const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { stderr: { type: "boolean" }, tail: { type: "string" }, follow: { type: "boolean", short: "f" } } });
     const session = refreshSession(sessionArg(positionals));
     const ref = positionals[1];
     if (!ref)
         fail("player required");
     const player = findPlayer(session, ref);
+    if (values.follow) {
+        await followPlayer(session.id, player.id);
+        return;
+    }
     const path = values.stderr ? player.stderrPath : player.stdoutPath;
     if (!existsSync(path))
         fail(`no log at ${path}`);
@@ -694,7 +701,7 @@ async function main() {
             case "diff":
                 return cmdDiff(rest);
             case "logs":
-                return cmdLogs(rest);
+                return await cmdLogs(rest);
             case "ask":
                 return await cmdAsk(rest);
             case "review":

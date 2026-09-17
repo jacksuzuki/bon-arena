@@ -112,8 +112,21 @@ export function createOrcaIntegration(opts) {
             }
         });
     }
+    // Runners are headless processes owned by Arena, so a candidate's Orca terminal would be an empty
+    // shell. Open one that follows the runner's log instead.
+    function attach(session) {
+        return session.players.map((player) => {
+            try {
+                run(["terminal", "create", "--worktree", selector(player.worktree), "--title", `${player.label} (live)`, "--command", opts.followCommand(session, player)]);
+                return { player: player.id, ok: true };
+            }
+            catch (err) {
+                return { player: player.id, ok: false, error: err.message };
+            }
+        });
+    }
     function open(_session, player) {
         run(["file", "open-changed", "--mode", "diff", "--worktree", selector(player.worktree)]);
     }
-    return { id: "orca", label: "Orca", status, sync, open };
+    return { id: "orca", label: "Orca", status, sync, attach, open };
 }

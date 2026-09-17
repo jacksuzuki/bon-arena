@@ -195,12 +195,17 @@ Arena 仍是独立的 CLI，但在 [Orca](https://github.com/stablyai/orca) 中�
 Orca 会自动发现已注册仓库的 worktree，Arena 只负责补充元数据：每个候选在侧边栏显示为
 `arena <id> · <标签>`，附带状态行（`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`），
 看板列随状态移动（运行中 → in-progress，完成 → in-review，已采用 → completed），并归在启动 arena 的
-worktree 之下。`arena clean` 删除 worktree 后，Orca 中也随之消失。
+worktree 之下。每个候选还会得到一个 `<标签> (live)` 终端，实时输出 runner 的进度
+（`arena logs <id> <player> --follow`），点击候选时不再是空 shell。`arena clean` 删除 worktree 后，Orca 中也随之消失。
 
 ```bash
 arena doctor            # “workspace apps” 显示集成是否生效
 arena open latest codex # 在 Orca 中以 diff 方式打开候选的改动文件
+arena logs latest claude --follow   # 在任意终端查看同样的实时输出
 ```
+
+`--follow` 会持续输出 runner 的 stdout/stderr。Claude Code 在 print 模式下结束前没有任何输出，
+因此对 Claude 改为显示实时会话 transcript（助手文本以及每次工具调用一行）。
 
 配置项为 `integrations.orca: auto | true | false`（默认 `auto` = 仅在 Orca 内运行时启用）。该集成只负责展示，
 且为 best effort：runner 仍由 Arena 以 headless 方式启动，`arena ask` / `arena review` 与 runner 隔离不受影响；

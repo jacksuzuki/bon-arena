@@ -169,7 +169,7 @@ export function newArenaId(now = new Date()) {
 export function saveSession(session) {
     mkdirSync(sessionsDir(), { recursive: true });
     const path = sessionFile(session.id);
-    const tmp = `${path}.tmp`;
+    const tmp = `${path}.${process.pid}.tmp`; // several arena processes (wait, logs --follow) may save at once
     writeFileSync(tmp, JSON.stringify(session, null, 2) + "\n");
     renameSync(tmp, path);
 }

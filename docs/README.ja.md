@@ -196,12 +196,17 @@ Orca は登録済みリポジトリの worktree を自動検出するので、Ar
 各候補はサイドバーに `arena <id> · <ラベル>` として並び、状態行
 (`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`) が付き、ボード列が
 実行中 → in-progress、完了 → in-review、採用 → completed と移動し、arena を開始した worktree の子として
-まとまります。`arena clean` で worktree を消せば Orca 側からも消えます。
+まとまります。各候補には `<ラベル> (live)` というターミナルも作られ、runner の進捗
+(`arena logs <id> <player> --follow`) が流れるので、候補をクリックしても空のシェルにはなりません。`arena clean` で worktree を消せば Orca 側からも消えます。
 
 ```bash
 arena doctor            # "workspace apps" に連携が有効かどうかが出る
 arena open latest codex # 候補の変更ファイルを Orca で diff として開く
+arena logs latest claude --follow   # 同じライブ表示を任意のターミナルで
 ```
+
+`--follow` は runner の stdout/stderr を追いかけて表示します。Claude Code は print モードでは完了まで何も
+出力しないため、Claude については会話 transcript（アシスタントの発言とツール呼び出し 1 行ずつ）を代わりに表示します。
 
 設定は `integrations.orca: auto | true | false`（既定 `auto` = Orca 内で実行中のみ）。連携は表示専用かつ
 best effort です。runner は従来どおり Arena が headless で起動するため `arena ask` / `arena review` や

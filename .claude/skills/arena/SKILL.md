@@ -235,7 +235,8 @@ Present a concise comparison to the user:
 
 When `arena doctor` lists a workspace app as active (Orca), the candidates already appear in its
 sidebar as `arena <id> · <Label>` with their status, grouped under the worktree the arena was
-started from; the CLI keeps that in sync on its own. Mention once that `arena open <id> <player>`
+started from, each with a `<Label> (live)` terminal streaming the runner's progress; the CLI keeps
+that in sync on its own. Mention once that `arena open <id> <player>`
 shows a candidate's changed files as diffs in the app, and run it when the user wants to look.
 
 ### 9. What next?
@@ -343,7 +344,7 @@ arena start --players a,b (--task <t> | --task-file <f> | stdin)
 arena status|wait|stop|summary|inspect <id|latest>
 arena collect <id> [--no-verify] [--test <cmd>|false] [--lint ...] [--typecheck ...]
 arena compare <id> [--max-diff-bytes <n>]
-arena diff <id> <player>        arena logs <id> <player> [--stderr] [--tail n]
+arena diff <id> <player>        arena logs <id> <player> [--stderr] [--tail n] [--follow]
 arena ask <id> <player> "<question>" [--question-file <f>] [--timeout <sec>]   (read-only; after the runner finished)
 arena review <id> [--players a,b] [--instructions "<text>"] [--timeout <sec>]  (every runner reviews the selected final version, read-only)
 arena select <id> <player|none> arena commit <id> <player> [-m msg]

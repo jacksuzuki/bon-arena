@@ -11,6 +11,8 @@ export interface OrcaOptions {
   commandExists: (command: string) => boolean
   env: Record<string, string | undefined>
   command?: string
+  /** Shell command that streams a player's progress (`arena logs <id> <player> --follow`). */
+  followCommand: (session: Session, player: Player) => string
 }
 
 /** True inside a terminal that Orca manages. */
@@ -118,9 +120,22 @@ export function createOrcaIntegration(opts: OrcaOptions): WorkspaceIntegration {
     })
   }
 
+  // Runners are headless processes owned by Arena, so a candidate's Orca terminal would be an empty
+  // shell. Open one that follows the runner's log instead.
+  function attach(session: Session): SyncEntry[] {
+    return session.players.map((player) => {
+      try {
+        run(["terminal", "create", "--worktree", selector(player.worktree), "--title", `${player.label} (live)`, "--command", opts.followCommand(session, player)])
+        return { player: player.id, ok: true }
+      } catch (err) {
+        return { player: player.id, ok: false, error: (err as Error).message }
+      }
+    })
+  }
+
   function open(_session: Session, player: Player): void {
     run(["file", "open-changed", "--mode", "diff", "--worktree", selector(player.worktree)])
   }
 
-  return { id: "orca", label: "Orca", status, sync, open }
+  return { id: "orca", label: "Orca", status, sync, attach, open }
 }
