@@ -143,10 +143,20 @@ function sessionArg(positionals, index = 0) {
 function jsonOut(session) {
     print(JSON.stringify(session, null, 2));
 }
-/** Mirror the session into active workspace apps (Orca). Display-only and best effort: never fails a command. */
-async function mirror(session, retries = 0, attach = false) {
+/** Run a long step that was announced to the workspace apps as an activity; on failure, take the announcement back. */
+async function withActivity(id, step) {
     try {
-        await syncIntegrations(session, loadConfig(session.repository), { retries, attach, log: (l) => process.stderr.write(`${l}\n`) });
+        return await step();
+    }
+    catch (err) {
+        await mirror(refreshSession(id));
+        throw err;
+    }
+}
+/** Mirror the session into active workspace apps (Orca). Display-only and best effort: never fails a command. */
+async function mirror(session, opts = {}) {
+    try {
+        await syncIntegrations(session, loadConfig(session.repository), { ...opts, log: (l) => process.stderr.write(`${l}\n`) });
     }
     catch (err) {
         process.stderr.write(`warning: workspace integrations skipped: ${err.message}\n`);
@@ -270,7 +280,7 @@ async function cmdStart(argv) {
         setup: values["no-setup"] ? false : values.setup,
         log: (l) => process.stderr.write(`${l}\n`),
     });
-    await mirror(session, 3, true); // Orca needs a moment to discover the new worktrees
+    await mirror(session, { retries: 3, attach: true }); // Orca needs a moment to discover the new worktrees
     if (values.json) {
         jsonOut(session);
     }
@@ -458,10 +468,13 @@ async function cmdAsk(argv) {
     }
     if (!question.trim())
         fail("question is required (positional text, --question, --question-file, or stdin)");
-    const r = await askPlayer(id, ref, question, {
+    const before = refreshSession(id);
+    await mirror(before, { activity: { [findPlayer(before, ref).id]: "answering a question" } });
+    const r = await withActivity(id, () => askPlayer(id, ref, question, {
         timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
         log: (l) => process.stderr.write(`${l}\n`),
-    });
+    }));
+    await mirror(r.session);
     if (values.json) {
         print(JSON.stringify({ session: r.session.id, player: r.player.id, ask: r.ask, answer: r.answer }, null, 2));
         return;
@@ -506,13 +519,17 @@ async function cmdReview(argv) {
     else if (positionals.length > 1) {
         instructions = positionals.slice(1).join(" ");
     }
-    const r = await reviewFinal(id, {
+    const before = refreshSession(id);
+    const reviewers = values.players ? parsePlayers(values.players).map((p) => findPlayer(before, p)) : before.players;
+    await mirror(before, { activity: Object.fromEntries(reviewers.map((p) => [p.id, `reviewing the final version (round ${before.reviews.length + 1})`])) });
+    const r = await withActivity(id, () => reviewFinal(id, {
         players: values.players ? parsePlayers(values.players) : undefined,
         instructions,
         timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
         maxDiffBytes: values["max-diff-bytes"] ? Number(values["max-diff-bytes"]) : undefined,
         log: (l) => process.stderr.write(`${l}\n`),
-    });
+    }));
+    await mirror(r.session);
     if (values.json) {
         print(JSON.stringify({ session: r.session.id, round: r.round, answers: r.answers }, null, 2));
     }

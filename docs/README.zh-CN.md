@@ -195,7 +195,8 @@ Arena 仍是独立的 CLI，但在 [Orca](https://github.com/stablyai/orca) 中�
 Orca 会自动发现已注册仓库的 worktree，Arena 只负责补充元数据：每个候选在侧边栏显示为
 `arena <id> · <标签>`，附带状态行（`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`），
 看板列随状态移动（运行中 → in-progress，完成 → in-review，已采用 → completed），并归在启动 arena 的
-worktree 之下。每个候选还会得到一个 `<标签> (live)` 终端，实时输出 runner 的进度
+worktree 之下。`arena review` / `arena ask` 运行期间，状态行以 `⏳ reviewing the final version (round 1)` /
+`⏳ answering a question` 开头，结束后在末尾附上结论（`review #1: approve`）。每个候选还会得到一个 `<标签> (live)` 终端，实时输出 runner 的进度
 （`arena logs <id> <player> --follow`），点击候选时不再是空 shell。`arena clean` 删除 worktree 后，Orca 中也随之消失。
 
 ```bash

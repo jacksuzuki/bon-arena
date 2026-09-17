@@ -78,9 +78,24 @@ test("orca comment and board column follow the candidate's state", () => {
   s.selected = "claude"
   assert.equal(orcaComment(s, claude!), "completed 2m05s · 3 files +40 −5 · test ✓ lint ✗ typecheck – · selected")
 
+  assert.match(orcaComment(s, claude!, Date.now(), "reviewing the final version (round 1)"), /^⏳ reviewing the final version \(round 1\) · completed 2m05s · /)
+  s.reviews = [
+    {
+      n: 1,
+      target: "claude",
+      targetCommit: null,
+      targetFingerprint: "f",
+      requestedAt: "2026-09-17T00:04:00.000Z",
+      diffPath: "/d",
+      entries: [{ player: "claude", verdict: "approve", askedAt: "2026-09-17T00:04:00.000Z", durationMs: 1, exitCode: 0, timedOut: false, worktreeChanged: false }],
+    },
+  ]
+  assert.match(orcaComment(s, claude!), / · selected · review #1: approve$/)
+  assert.doesNotMatch(orcaComment(s, codex!), /review/)
+
   s.adopted = { player: "claude", mode: "merge", commit: "fedcba9876543210", at: "2026-09-17T00:05:00.000Z" }
   assert.equal(orcaWorkspaceStatus(s, claude!), "completed")
-  assert.match(orcaComment(s, claude!), /adopted \(merge\) → fedcba987654$/)
+  assert.match(orcaComment(s, claude!), /adopted \(merge\) → fedcba987654 · review #1: approve$/)
 })
 
 test("orca sync labels every candidate under the host worktree and falls back without a parent", () => {

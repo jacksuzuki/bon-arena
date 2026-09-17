@@ -250,7 +250,9 @@ its candidates there. Orca discovers the worktrees of a registered repository by
 adds the metadata, so each candidate shows up in the sidebar as `arena <id> · <Label>` with a status
 line (`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`), moves across
 the board columns (running → in-progress, finished → in-review, adopted → completed) and is grouped
-under the worktree the arena was started from. Each candidate also gets a `<Label> (live)` terminal
+under the worktree the arena was started from. While `arena review` or `arena ask` runs, the status
+line starts with `⏳ reviewing the final version (round 1)` / `⏳ answering a question`, and afterwards
+it ends with the verdict (`review #1: approve`). Each candidate also gets a `<Label> (live)` terminal
 that streams the runner's progress (`arena logs <id> <player> --follow`), so clicking a candidate
 shows what it is doing instead of an empty shell. `arena clean` removes the worktrees and Orca drops
 them.

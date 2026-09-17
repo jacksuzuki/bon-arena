@@ -30,10 +30,10 @@ export async function syncIntegrations(session, config, opts = {}, deps = {}) {
         try {
             if (!integration.status().active)
                 continue;
-            let entries = integration.sync(session);
+            let entries = integration.sync(session, opts.activity);
             for (let attempt = 0; attempt < (opts.retries ?? 0) && entries.some((e) => !e.ok); attempt++) {
                 await new Promise((r) => setTimeout(r, opts.retryDelayMs ?? 2000));
-                entries = integration.sync(session);
+                entries = integration.sync(session, opts.activity);
             }
             if (opts.attach && entries.every((e) => e.ok))
                 entries = integration.attach(session);

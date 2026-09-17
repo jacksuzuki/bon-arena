@@ -28,8 +28,11 @@ export interface WorkspaceIntegration {
   id: string
   label: string
   status(): IntegrationStatus
-  /** Mirror the session's current state into the app. Idempotent. */
-  sync(session: Session): SyncEntry[]
+  /**
+   * Mirror the session's current state into the app. Idempotent. `activity` maps player ids to what
+   * they are doing right now when the session file cannot tell (e.g. "reviewing the final version").
+   */
+  sync(session: Session, activity?: Record<string, string>): SyncEntry[]
   /** Once, right after the runners started: give every candidate a terminal that shows its live progress. */
   attach(session: Session): SyncEntry[]
   /** Bring a candidate's worktree and changed files up in the app. */

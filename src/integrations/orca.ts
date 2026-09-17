@@ -38,8 +38,9 @@ export function orcaWorkspaceStatus(session: Session, player: Player): "in-progr
 }
 
 /** One-line state of a candidate, shown as the worktree comment in Orca's sidebar. */
-export function orcaComment(session: Session, player: Player, now = Date.now()): string {
-  const parts = [`${player.status} ${formatDuration(playerDurationMs(player, now))}`]
+export function orcaComment(session: Session, player: Player, now = Date.now(), activity?: string): string {
+  // What is happening now goes first: the sidebar truncates long comments.
+  const parts = [...(activity ? [`⏳ ${activity}`] : []), `${player.status} ${formatDuration(playerDurationMs(player, now))}`]
   const r = player.result
   if (r) {
     parts.push(`${r.git.changedFiles} files +${r.git.additions} −${r.git.deletions}`)
@@ -49,6 +50,9 @@ export function orcaComment(session: Session, player: Player, now = Date.now()):
   if (session.adopted?.player === player.id) parts.push(`adopted (${session.adopted.mode}) → ${session.adopted.commit.slice(0, 12)}`)
   else if (session.synthesis?.base === player.id) parts.push(session.synthesis.finishedAt ? "synthesis finished" : "synthesis base")
   else if (session.selected === player.id) parts.push("selected")
+  const round = session.reviews.at(-1)
+  const review = round?.entries.find((e) => e.player === player.id)
+  if (round && review) parts.push(`review #${round.n}: ${review.error ? "failed" : review.timedOut ? "timed out" : review.verdict}`)
   return parts.join(" · ")
 }
 
@@ -90,7 +94,7 @@ export function createOrcaIntegration(opts: OrcaOptions): WorkspaceIntegration {
       : { ...base, active: false, detail: "not running inside Orca (set integrations.orca: true to label worktrees anyway)" }
   }
 
-  function sync(session: Session): SyncEntry[] {
+  function sync(session: Session, activity: Record<string, string> = {}): SyncEntry[] {
     if (session.status === "cleaned") return [] // worktrees are gone; Orca drops them by itself
     const short = session.id.split("-").pop() ?? session.id
     return session.players.map((player) => {
@@ -102,7 +106,7 @@ export function createOrcaIntegration(opts: OrcaOptions): WorkspaceIntegration {
         "--display-name",
         `arena ${short} · ${player.label}`,
         "--comment",
-        orcaComment(session, player),
+        orcaComment(session, player, Date.now(), activity[player.id]),
         "--workspace-status",
         orcaWorkspaceStatus(session, player),
       ]

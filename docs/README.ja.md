@@ -196,7 +196,8 @@ Orca は登録済みリポジトリの worktree を自動検出するので、Ar
 各候補はサイドバーに `arena <id> · <ラベル>` として並び、状態行
 (`completed 4m12s · 5 files +120 −30 · test ✓ lint ✓ typecheck ✗ · selected`) が付き、ボード列が
 実行中 → in-progress、完了 → in-review、採用 → completed と移動し、arena を開始した worktree の子として
-まとまります。各候補には `<ラベル> (live)` というターミナルも作られ、runner の進捗
+まとまります。`arena review` / `arena ask` の実行中は状態行の先頭に `⏳ reviewing the final version (round 1)` /
+`⏳ answering a question` が付き、終了後は末尾に判定 (`review #1: approve`) が付きます。各候補には `<ラベル> (live)` というターミナルも作られ、runner の進捗
 (`arena logs <id> <player> --follow`) が流れるので、候補をクリックしても空のシェルにはなりません。`arena clean` で worktree を消せば Orca 側からも消えます。
 
 ```bash

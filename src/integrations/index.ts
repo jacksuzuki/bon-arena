@@ -43,6 +43,8 @@ export function integrationStatuses(config: ArenaConfig, deps: IntegrationDeps =
 }
 
 export interface SyncOptions {
+  /** What players are doing right now, by player id, when the session file cannot tell (review, ask). */
+  activity?: Record<string, string>
   /** Also open a live-progress terminal per candidate (only right after `arena start`). */
   attach?: boolean
   /** Extra attempts for players the app does not know yet (it discovers new worktrees after a moment). */
@@ -57,10 +59,10 @@ export async function syncIntegrations(session: Session, config: ArenaConfig, op
   for (const integration of createIntegrations(config, deps)) {
     try {
       if (!integration.status().active) continue
-      let entries = integration.sync(session)
+      let entries = integration.sync(session, opts.activity)
       for (let attempt = 0; attempt < (opts.retries ?? 0) && entries.some((e) => !e.ok); attempt++) {
         await new Promise((r) => setTimeout(r, opts.retryDelayMs ?? 2000))
-        entries = integration.sync(session)
+        entries = integration.sync(session, opts.activity)
       }
       if (opts.attach && entries.every((e) => e.ok)) entries = integration.attach(session)
       const failed = entries.filter((e) => !e.ok)
