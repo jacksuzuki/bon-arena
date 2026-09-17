@@ -36,6 +36,8 @@ import { createIntegrations, integrationStatuses, syncIntegrations } from "./int
 
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
 
+Built-in runners: Claude (claude), Codex (codex), Antigravity (agy). Default players: claude,codex.
+
 Usage:
   arena install-skill [--force] [--config-dir <path>]
                                                     Install the Claude Code /arena skill (no repository required)
@@ -59,7 +61,8 @@ Usage:
   arena logs <id|latest> <player> [--stderr]        Print a runner's output log
   arena ask <id|latest> <player> [question] [--question-file <f>] [--timeout <sec>] [--json]
                                                     Resume the finished runner's own conversation inside its worktree with a
-                                                    read-only question (Claude session / Codex thread) and print its answer
+                                                    read-only question (Claude session / Codex thread / Antigravity conversation;
+                                                    agy has no read-only mode, so that is best effort) and print its answer
   arena review <id|latest> [--players a,b] [--instructions <text>|--instructions-file <f>] [--timeout <sec>] [--json]
                                                     Have every runner review the final version (the selected candidate's
                                                     worktree) by resuming its conversation read-only; prints the verdicts

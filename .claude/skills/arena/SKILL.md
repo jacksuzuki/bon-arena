@@ -1,6 +1,6 @@
 ---
 name: arena
-description: Run an implementation arena - two coding agents (Claude Code, Codex CLI, or custom runners) implement the same task in separate git worktrees, then compare diffs, tests, lint and typecheck results and let the user pick. By default the request is first refined with the user into a one-shot specification ("simple" skips that). Use when the user types /arena, wants to "compare Claude vs Codex", "race agents", or "try two implementations".
+description: Run an implementation arena - two coding agents (Claude Code, Codex CLI, Antigravity CLI, or custom runners) implement the same task in separate git worktrees, then compare diffs, tests, lint and typecheck results and let the user pick. By default the request is first refined with the user into a one-shot specification ("simple" skips that). Use when the user types /arena, wants to "compare Claude vs Codex", "race agents", or "try two implementations".
 argument-hint: "[task <text> | task --simple <text> | task-simple <text> | status | list | resume <id> | compare <id> | clean <id>]"
 ---
 
@@ -81,7 +81,7 @@ your own system prompt and continue.
 ### 2. Players
 
 Ask with AskUserQuestion, two questions in one call, options taken from available runners
-(built-ins: Claude, Codex; plus any custom runners from `.arena.yaml`):
+(built-ins: Claude, Codex, Antigravity (`agy`); plus any custom runners from `.arena.yaml`):
 
 - "Player 1?" default Claude
 - "Player 2?" default Codex
@@ -216,8 +216,9 @@ was intended — ask the runner itself before judging:
 arena ask <id> <player> "<one specific question>"
 ```
 
-It resumes that runner's conversation (Claude session / Codex thread) in its worktree with
-inspection-only permissions and prints the answer; the answer is saved and included in later
+It resumes that runner's conversation (Claude session / Codex thread / Antigravity conversation) in
+its worktree with inspection-only permissions (best effort for Antigravity: `agy` has no read-only
+mode, so watch for the worktree-changed warning) and prints the answer; the answer is saved and included in later
 `arena compare` output. Ask one concrete question at a time, at most a few per candidate, and
 treat the reply as the runner's account, not as verified fact. If the output warns that the
 worktree changed, re-run `arena collect <id> --player <player>`. If it reports that the conversation

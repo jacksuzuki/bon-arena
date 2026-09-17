@@ -23,7 +23,8 @@ other hosts (Codex, standalone use, other harnesses) can drive the same CLI.
 
 - Node.js >= 22.18 (or Bun; the code uses only Node-compatible APIs)
 - git
-- Runners you want to race: `claude` (Claude Code CLI) and/or `codex` (Codex CLI) in PATH
+- Runners you want to race in PATH: `claude` (Claude Code CLI), `codex` (Codex CLI) and/or `agy`
+  (Antigravity CLI). These three are built in; any other CLI can be added in the configuration
 
 ## Install
 
@@ -57,7 +58,7 @@ missing, but the global install is faster and lets you use `/arena` without any 
 The compiled CLI (`dist/`) is committed, so the repository installs without a build step:
 `npm install -g --install-links github:jacksuzuki/bon-arena` (the flag matters: without it npm 10
 installs a git package as a symlink to a temporary clone that it deletes right away) or
-`npx --package github:jacksuzuki/bon-arena arena doctor`. Pin a version with `#v0.3.1`. For
+`npx --package github:jacksuzuki/bon-arena arena doctor`. Pin a version with `#v0.4.0`. For
 development:
 
 ```bash
@@ -140,6 +141,7 @@ happens only when you say so, and nothing is ever pushed.
 
 ```bash
 arena run --players claude,codex --task "Add rate limiting to the API"   # simple mode: text goes to the runners verbatim
+arena run --players claude,agy --task "Add rate limiting to the API"     # any built-in: claude, codex, agy (Antigravity)
 # or step by step
 arena start --players claude,codex --task-file task.md
 arena wait latest
@@ -160,6 +162,9 @@ arena finish latest
 arena review latest                    # every runner reviews the final version (read-only, in parallel)
 arena review latest --instructions "Focus on the retry path"   # optional steer; --players codex limits reviewers
 ```
+
+Omitting `--players` still means `claude,codex`. `arena doctor` lists all three built-ins; a missing
+`agy` does not change its exit status (a missing `claude` or `codex` still does).
 
 Refinement from a terminal (the CLI never calls a model; a host or a human does the thinking):
 
@@ -204,6 +209,9 @@ runners:
     extraArgs: []          # appended to the built-in invocation
   codex:
     command: codex
+  agy:                     # Antigravity CLI
+    command: agy
+    extraArgs: ["--effort", "high"]   # model / label / env work as for the other built-ins
   gemini:                  # any CLI becomes a runner
     command: gemini
     label: Gemini
@@ -266,11 +274,17 @@ original request is not part of the prompt, so the runners cannot re-interpret i
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'` (prompt on stdin) |
 | Codex  | `codex exec -C <worktree> --sandbox workspace-write -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
 Headless runs cannot answer permission prompts, so Claude runs with permissions skipped; isolation
 comes from the dedicated worktree, not from the permission system. Each runner is supervised by a
 detached process that records the exit code, so `arena` commands can exit and come back later
 (`arena wait`, `arena status`). `arena stop` kills the whole process group.
+
+`agy` does not work in the process's current directory and cannot read the prompt from stdin, so the
+worktree is passed with `--add-dir` and the prompt as a single `-p=<prompt>` argument. Its print mode
+stops after 5 minutes by default, hence the explicit `--print-timeout`; the output is `stream-json`
+because that is where the conversation id appears (the runner log is NDJSON, not plain text).
 
 The variables `CLAUDECODE` / `CLAUDE_CODE_*` are stripped from runner environments so a Claude
 runner started from inside Claude Code does not think it is nested. Claude Code keys its auto-memory
@@ -290,6 +304,7 @@ reviewer sees the runner's own account next to the diff.
 |---|---|
 | Claude | `claude -p --resume <session-id> --output-format text --permission-mode dontAsk --allowedTools <read-only list> --disallowedTools Edit,Write,MultiEdit,NotebookEdit --settings '{"autoMemoryEnabled":false}'` |
 | Codex  | `codex exec resume -c sandbox_mode="read-only" -c approval_policy="never" <thread-id> -` |
+| Antigravity | `agy --conversation <conversation-id> --add-dir <worktree> --sandbox --dangerously-skip-permissions --print-timeout 1h --output-format text -p=<prompt>` |
 
 Asking is strictly read-only: the prompt says so, Claude is limited to inspection tools and Codex to
 the read-only sandbox, and the worktree is fingerprinted before and after. If it changed anyway,
@@ -297,8 +312,14 @@ the answer is flagged and `arena collect --player <p>` should be re-run before t
 results. Use `arena ask` to understand a candidate ("which requirement does this cover?", "why does
 the test skip on Windows?"), not to request fixes: fixing is the host's job in the synthesis step.
 
+**Antigravity is the exception:** `agy` has no read-only mode (in print mode even `--mode plan` and
+`--sandbox` can write files), so for an `agy` player the read-only part of `arena ask` / `arena review`
+is best effort: the prompt forbids changes and `--sandbox` is passed, but nothing enforces it. If the
+worktree changed, the warning described above is what tells you.
+
 The Claude conversation id is fixed at launch (`--session-id`). Codex has no such flag, so the thread
-id is looked up after the run in `$CODEX_HOME/sessions` by worktree path and start time. Sessions
+id is looked up after the run in `$CODEX_HOME/sessions` by worktree path and start time. Antigravity
+has none either; its conversation id is read from the run's stdout log (`stream-json`). Sessions
 whose worktrees were cleaned, and sessions started with a version before `arena ask` existed, cannot
 be asked. Custom runners need `askArgs` in the configuration.
 
@@ -334,7 +355,7 @@ src/
   session.ts          JSON session state (zod schema)
   config.ts           config.yaml / .arena.yaml
   git/                repository, worktree, diff
-  runners/            ArenaRunner interface, claude, codex, custom, prompt
+  runners/            ArenaRunner interface, claude, codex, agy, custom, prompt
   process/            detached supervisor + spawn helpers
   verification/       detect + run test/lint/typecheck
   compare/            status, summary, markdown compare bundle

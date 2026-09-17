@@ -66,7 +66,7 @@ export interface ArenaRunner {
   invocation(input: RunnerInput): RunnerInvocation
   /**
    * Locate the runner's conversation id after the run when it was not chosen up front
-   * (Codex writes its thread id to its own session store). Return null when unknown.
+   * (Codex writes its thread id to its own session store, Antigravity prints it on stdout). Return null when unknown.
    */
   findSessionId?(lookup: SessionLookup): string | null
   /**
