@@ -37,6 +37,8 @@ test("built-in runners are headless and honour config", () => {
   assert.ok(claude.args.includes("-p"))
   assert.ok(claude.args.join(" ").includes("--model opus --bare"))
   assert.equal(claude.promptViaStdin, true)
+  assert.ok(claude.args.includes('{"autoMemoryEnabled":false}'))
+  assert.equal(claude.env?.CLAUDE_CODE_DISABLE_AUTO_MEMORY, "1")
 
   const codex = createCodexRunner({ command: "/opt/codex" }).invocation(input)
   assert.equal(codex.command, "/opt/codex")

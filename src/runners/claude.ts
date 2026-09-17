@@ -19,7 +19,9 @@ export function createClaudeRunner(config: RunnerConfig = {}): ArenaRunner {
       return commandExists(command)
     },
     invocation(input: RunnerInput): RunnerInvocation {
-      const args = ["-p", "--dangerously-skip-permissions", "--output-format", "text"]
+      // Auto-memory is keyed by repository, so a runner inside a worktree would read and write the
+      // host project's memory. Disable it (setting + env, both honoured by Claude Code).
+      const args = ["-p", "--dangerously-skip-permissions", "--output-format", "text", "--settings", JSON.stringify({ autoMemoryEnabled: false })]
       if (config.model) args.push("--model", config.model)
       args.push(...(config.extraArgs ?? []))
       return {
@@ -27,6 +29,7 @@ export function createClaudeRunner(config: RunnerConfig = {}): ArenaRunner {
         args,
         promptViaStdin: true,
         env: {
+          CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
           ...(config.env ?? {}),
           // Where Claude's own transcript for this run lands is up to Claude; we just tag the run.
           ARENA_RESULTS_DIR: join(input.resultsDir),

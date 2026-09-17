@@ -37,8 +37,9 @@ task, launch, report progress, and help the user compare and decide. Never re-im
 
 ### 1. Preflight
 
-Run `arena doctor --json` in the repository root. Read `runners[]` (id, label, available) and
-`verify` (detected test/lint/typecheck commands). If the repo is not a git repo or has no commits,
+Run `arena doctor --json` in the repository root. Read `runners[]` (id, label, available),
+`verify` (detected test/lint/typecheck commands) and `setup` (worktree preparation such as
+`npm ci`, run before the runners start). If the repo is not a git repo or has no commits,
 stop and explain. If the working tree is dirty, warn: candidates start from HEAD and will not see
 uncommitted changes.
 
@@ -56,7 +57,7 @@ If a chosen runner is unavailable, say which command is missing and ask again.
 
 If `$ARGUMENTS` already contains the task, confirm it in one line. Otherwise ask the user in plain
 text: "Task?" and wait. Do not paraphrase the task; pass it verbatim. Then show a one-screen launch
-summary (repo, base branch and commit, players, verification commands) and launch:
+summary (repo, base branch and commit, players, setup and verification commands) and launch:
 
 ```bash
 arena start --players <p1>,<p2> --json <<'ARENA_TASK'
@@ -64,7 +65,8 @@ arena start --players <p1>,<p2> --json <<'ARENA_TASK'
 ARENA_TASK
 ```
 
-Report the session id, branches and worktree paths from the JSON.
+Report the session id, branches and worktree paths from the JSON. If `start` fails with
+"setup failed", show the setup log it names and offer `--no-setup` or a `.arena.yaml` `setup` entry.
 
 ### 4. Wait
 
@@ -118,7 +120,7 @@ merge. Finally offer to clean the arena (the selected branch is kept).
 
 ```
 arena doctor [--repo <path>] [--json]
-arena start --players a,b (--task <t> | --task-file <f> | stdin) [--json]
+arena start --players a,b (--task <t> | --task-file <f> | stdin) [--setup <cmd>|--no-setup] [--json]
 arena status|wait|stop|summary|inspect <id|latest>
 arena collect <id> [--no-verify] [--test <cmd>|false] [--lint ...] [--typecheck ...]
 arena compare <id> [--max-diff-bytes <n>]
@@ -128,4 +130,4 @@ arena list [--all]              arena clean <id> [--keep-branches] [--force]
 ```
 
 State lives in `~/.arena/sessions/<id>.json`; worktrees, logs and diffs in
-`~/.arena/<project>/<id>/`. Repository config: `.arena.yaml` (`runners`, `verify`).
+`~/.arena/<project>/<id>/`. Repository config: `.arena.yaml` (`runners`, `verify`, `setup`).

@@ -51,7 +51,9 @@ export function renderStatus(session: Session, now = Date.now()): string {
 }
 
 export function renderSummary(session: Session): string {
-  const lines = [`Arena ${session.id} complete`, "", `Task: ${firstLine(session.task)}`, `Base: ${session.baseCommit.slice(0, 12)}${session.baseBranch ? ` (${session.baseBranch})` : ""}`, ""]
+  const lines = [`Arena ${session.id} complete`, "", `Task: ${firstLine(session.task)}`, `Base: ${session.baseCommit.slice(0, 12)}${session.baseBranch ? ` (${session.baseBranch})` : ""}`]
+  if (session.setup.length) lines.push(`Setup: ${session.setup.join(" && ")}`)
+  lines.push("")
   for (const p of session.players) {
     lines.push(p.label)
     lines.push(`  status        ${p.status}${p.exitCode !== undefined && p.exitCode !== null && p.exitCode !== 0 ? ` (exit ${p.exitCode})` : ""}`)

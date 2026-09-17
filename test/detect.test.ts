@@ -59,3 +59,28 @@ test("resolve precedence: override > config > detected, false disables", () => {
   assert.deepEqual(v2, { test: "npm test" })
   rmSync(dir, { recursive: true })
 })
+
+import { detectSetupCommands, resolveSetupCommands } from "../src/verification/detect.ts"
+
+test("detects setup command from lockfile", () => {
+  const npm = tmpRepo({ "package.json": "{}", "package-lock.json": "{}" })
+  assert.deepEqual(detectSetupCommands(npm), ["npm ci"])
+  const bare = tmpRepo({ "package.json": "{}" })
+  assert.deepEqual(detectSetupCommands(bare), ["npm install"])
+  const pnpm = tmpRepo({ "package.json": "{}", "pnpm-lock.yaml": "" })
+  assert.deepEqual(detectSetupCommands(pnpm), ["pnpm install --frozen-lockfile"])
+  const none = tmpRepo({ "Cargo.toml": "" })
+  assert.deepEqual(detectSetupCommands(none), [])
+  for (const d of [npm, bare, pnpm, none]) rmSync(d, { recursive: true })
+})
+
+test("resolveSetupCommands precedence and false", () => {
+  const dir = tmpRepo({ "package.json": "{}", "package-lock.json": "{}" })
+  assert.deepEqual(resolveSetupCommands(dir, undefined, undefined), ["npm ci"])
+  assert.deepEqual(resolveSetupCommands(dir, "make deps", undefined), ["make deps"])
+  assert.deepEqual(resolveSetupCommands(dir, ["a", " b "], undefined), ["a", "b"])
+  assert.deepEqual(resolveSetupCommands(dir, "make deps", "npm install"), ["npm install"])
+  assert.deepEqual(resolveSetupCommands(dir, "make deps", false), [])
+  assert.deepEqual(resolveSetupCommands(dir, false, undefined), [])
+  rmSync(dir, { recursive: true })
+})

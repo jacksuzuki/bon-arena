@@ -21,7 +21,7 @@ import {
 import { renderCompareBundle, renderStatus, renderSummary, formatDuration, playerDurationMs } from "./compare/summary.ts"
 import { findPlayer, listSessions, resolveSessionId, type Session } from "./session.ts"
 import { inspectRepository } from "./git/repository.ts"
-import { resolveVerifyCommands } from "./verification/detect.ts"
+import { resolveSetupCommands, resolveVerifyCommands } from "./verification/detect.ts"
 import { loadConfig } from "./config.ts"
 import { sessionFile } from "./paths.ts"
 import { installSkill } from "./install.ts"
@@ -32,8 +32,8 @@ Usage:
   arena install-skill [--force] [--config-dir <path>]
                                                     Install the Claude Code /arena skill (no repository required)
   arena doctor [--repo <path>]                      Check runner availability and detected verify commands
-  arena start --task <text>|--task-file <f> [--players claude,codex] [--repo <path>]
-                                                    Create session + worktrees, launch runners, return immediately
+  arena start --task <text>|--task-file <f> [--players claude,codex] [--repo <path>] [--setup <cmd>|--no-setup]
+                                                    Create session + worktrees, run setup (e.g. npm ci), launch runners
   arena status <id|latest> [--json]                 Show runner progress
   arena wait <id|latest> [--timeout <sec>] [--json] Block until every runner finishes
   arena stop <id|latest>                            Terminate running runners
@@ -53,6 +53,7 @@ Usage:
 
 Common options:
   --test/--lint/--typecheck <cmd|false>  Override verification commands (false disables)
+  --setup <cmd> / --no-setup             Worktree preparation command (default: .arena.yaml setup or lockfile detection)
   --json                                 Machine-readable output
   --repo <path>                          Repository (default: cwd)
 `
@@ -135,8 +136,9 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   const root = repoInfo?.root ?? repoPath
   const runners = await checkRunners(root)
   const verify = repoInfo ? resolveVerifyCommands(root, loadConfig(root).verify) : {}
+  const setup = repoInfo ? resolveSetupCommands(root, loadConfig(root).setup, undefined) : []
   if (values.json) {
-    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify }, null, 2))
+    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup }, null, 2))
     return
   }
   print("Arena doctor")
@@ -153,6 +155,9 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   print("")
   print("verification")
   for (const k of ["test", "lint", "typecheck"] as const) print(`  ${k.padEnd(10)} ${verify[k] ?? "(none)"}`)
+  print("")
+  print("worktree setup")
+  print(`  ${setup.length ? setup.join(" && ") : "(none)"}`)
   const missing = runners.filter((r) => !r.available && (r.id === "claude" || r.id === "codex"))
   if (missing.length) process.exitCode = 1
 }
@@ -169,6 +174,8 @@ async function cmdStart(argv: Argv): Promise<Session> {
       test: { type: "string" },
       lint: { type: "string" },
       typecheck: { type: "string" },
+      setup: { type: "string", multiple: true },
+      "no-setup": { type: "boolean" },
       json: { type: "boolean" },
     },
   })
@@ -178,6 +185,7 @@ async function cmdStart(argv: Argv): Promise<Session> {
     task,
     players: parsePlayers(values.players),
     verify: verifyOverridesFrom(values),
+    setup: values["no-setup"] ? false : values.setup,
     log: (l) => process.stderr.write(`${l}\n`),
   })
   if (values.json) {

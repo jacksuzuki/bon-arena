@@ -15,6 +15,7 @@ const session: Session = {
   startedAt: "2026-09-17T00:00:00.000Z",
   selected: "codex",
   verify: { test: "npm test", lint: "npm run lint" },
+  setup: ["npm ci"],
   players: [
     {
       id: "claude",

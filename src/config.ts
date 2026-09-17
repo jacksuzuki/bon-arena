@@ -25,9 +25,13 @@ const VerifyConfigSchema = z.object({
 })
 export type VerifyConfig = z.infer<typeof VerifyConfigSchema>
 
+/** Commands run inside each fresh worktree before runners start (e.g. `npm ci`). `false` disables auto-detection. */
+const SetupConfigSchema = z.union([z.string(), z.array(z.string()), z.literal(false)]).optional()
+
 export const ArenaConfigSchema = z.object({
   runners: z.record(z.string(), RunnerConfigSchema).default({}),
   verify: VerifyConfigSchema.default({}),
+  setup: SetupConfigSchema,
 })
 export type ArenaConfig = z.infer<typeof ArenaConfigSchema>
 
@@ -59,5 +63,6 @@ export function loadConfig(repoPath: string): ArenaConfig {
   return {
     runners,
     verify: { ...user.verify, ...repo.verify },
+    setup: repo.setup !== undefined ? repo.setup : user.setup,
   }
 }

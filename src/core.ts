@@ -14,14 +14,17 @@ import { createRunnerRegistry, resolveRunner } from "./runners/index.ts"
 import { buildArenaPrompt } from "./runners/prompt.ts"
 import type { ArenaRunner } from "./runners/types.ts"
 import { findPlayer, loadSession, newArenaId, saveSession, type Player, type Session } from "./session.ts"
-import { resolveVerifyCommands, type VerifyOverrides } from "./verification/detect.ts"
-import { runAllVerifications, DEFAULT_VERIFY_TIMEOUT_MS, type VerifyKind } from "./verification/run.ts"
+import { resolveSetupCommands, resolveVerifyCommands, type SetupOverride, type VerifyOverrides } from "./verification/detect.ts"
+import { runAllVerifications, runVerification, DEFAULT_VERIFY_TIMEOUT_MS, type VerifyKind } from "./verification/run.ts"
 
 export interface StartOptions {
   repo: string
   task: string
   players: string[]
   verify?: VerifyOverrides
+  /** Worktree preparation commands; `false` skips, undefined uses config / auto-detection. */
+  setup?: SetupOverride
+  setupTimeoutMs?: number
   log?: (line: string) => void
 }
 
@@ -84,6 +87,7 @@ export async function startArena(opts: StartOptions): Promise<Session> {
   writeFileSync(join(dir, "task.md"), opts.task.trim() + "\n")
 
   const verify = resolveVerifyCommands(repo.root, config.verify, opts.verify)
+  const setup = resolveSetupCommands(repo.root, config.setup, opts.setup)
   const playerIds = uniquePlayerIds(runners.map((r) => r.id))
 
   const session: Session = {
@@ -96,6 +100,7 @@ export async function startArena(opts: StartOptions): Promise<Session> {
     status: "created",
     players: [],
     verify,
+    setup,
     arenaDir: dir,
     startedAt: new Date().toISOString(),
     selected: null,
@@ -124,7 +129,48 @@ export async function startArena(opts: StartOptions): Promise<Session> {
   }
   saveSession(session)
 
-  // 2. run
+  // 2. prepare: install dependencies etc. so runners and verification see a usable checkout
+  if (setup.length > 0) {
+    log(`running setup in each worktree: ${setup.join(" && ")}`)
+    const timeout = opts.setupTimeoutMs ?? (config.verify.timeout ? config.verify.timeout * 1000 : DEFAULT_VERIFY_TIMEOUT_MS)
+    const results = await Promise.all(
+      session.players.map(async (player) => {
+        const logPath = join(logsDir, `${player.id}.setup.log`)
+        const started = Date.now()
+        let passed = true
+        for (const command of setup) {
+          const r = await runVerification(command, player.worktree, logPath, timeout, { append: true })
+          if (!r.passed) {
+            passed = false
+            break
+          }
+        }
+        player.setup = { commands: setup, passed, durationMs: Date.now() - started, logPath }
+        return player
+      }),
+    )
+    saveSession(session)
+    const failed = results.filter((p) => !p.setup?.passed)
+    if (failed.length > 0) {
+      for (const p of session.players) {
+        try {
+          removeWorktree(repo.root, p.worktree)
+          deleteBranch(repo.root, p.branch)
+        } catch {
+          /* best effort */
+        }
+      }
+      session.status = "cleaned"
+      saveSession(session)
+      throw new Error(
+        `setup failed for ${failed.map((p) => p.label).join(", ")} (see ${failed.map((p) => p.setup?.logPath).join(", ")}). ` +
+          `Fix the setup command, set "setup: false" in .arena.yaml, or pass --no-setup.`,
+      )
+    }
+    log(`setup done (${results.map((p) => `${p.label} ${Math.round((p.setup?.durationMs ?? 0) / 1000)}s`).join(", ")})`)
+  }
+
+  // 3. run
   const prompt = buildArenaPrompt(session.task)
   for (let i = 0; i < runners.length; i++) {
     const runner = runners[i]!

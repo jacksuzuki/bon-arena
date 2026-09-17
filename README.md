@@ -124,8 +124,16 @@ verify:
   test: bun test
   lint: bun run lint
   typecheck: false         # false disables a check
-  timeout: 600             # seconds per command
+  timeout: 600             # seconds per command (also applies to setup)
+
+setup: npm ci              # run in every fresh worktree before the runners start
+# setup: [npm ci, npm run codegen]
+# setup: false             # skip; default is lockfile detection (npm ci / pnpm / yarn / bun install)
 ```
+
+Fresh worktrees contain only tracked files, so without `setup` the runners and the verification step
+would see no `node_modules`. If a setup command fails, the arena is aborted and its worktrees removed
+(`arena start --no-setup` or `--setup "<cmd>"` override the config for one run).
 
 If a custom runner's `args` does not reference `{{prompt}}` / `{{promptFile}}`, the prompt is piped
 to stdin.
@@ -137,7 +145,7 @@ the task completely, run tests, do not push) followed by the task verbatim.
 
 | Runner | Invocation |
 |---|---|
-| Claude | `claude -p --dangerously-skip-permissions --output-format text` (prompt on stdin) |
+| Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'` (prompt on stdin) |
 | Codex  | `codex exec -C <worktree> --sandbox workspace-write -c approval_policy="never" -o <results>/codex.last-message.md -` |
 
 Headless runs cannot answer permission prompts, so Claude runs with permissions skipped; isolation
@@ -146,7 +154,10 @@ detached process that records the exit code, so `arena` commands can exit and co
 (`arena wait`, `arena status`). `arena stop` kills the whole process group.
 
 The variables `CLAUDECODE` / `CLAUDE_CODE_*` are stripped from runner environments so a Claude
-runner started from inside Claude Code does not think it is nested.
+runner started from inside Claude Code does not think it is nested. Claude Code keys its auto-memory
+by repository, so a runner inside a worktree would otherwise read and write the host project's
+memory; the Claude runner therefore passes `--settings '{"autoMemoryEnabled":false}'` and sets
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`.
 
 ## Project layout
 

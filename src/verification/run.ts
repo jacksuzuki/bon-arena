@@ -5,10 +5,16 @@ import { runnerEnvironment } from "../process/spawn.ts"
 
 export const DEFAULT_VERIFY_TIMEOUT_MS = 10 * 60 * 1000
 
-export function runVerification(command: string, cwd: string, logPath: string, timeoutMs = DEFAULT_VERIFY_TIMEOUT_MS): Promise<VerificationResult> {
+export function runVerification(
+  command: string,
+  cwd: string,
+  logPath: string,
+  timeoutMs = DEFAULT_VERIFY_TIMEOUT_MS,
+  opts: { append?: boolean } = {},
+): Promise<VerificationResult> {
   return new Promise((resolve) => {
     const started = Date.now()
-    const log = createWriteStream(logPath, { flags: "w" })
+    const log = createWriteStream(logPath, { flags: opts.append ? "a" : "w" })
     log.write(`$ ${command}\n\n`)
     const child = spawn(command, {
       cwd,

@@ -78,6 +78,42 @@ export function detectVerifyCommands(root: string): VerifyCommands {
   return out
 }
 
+/**
+ * Guess how to prepare a fresh worktree so runners and verification see installed dependencies.
+ * Only package-manager installs are detected; compiled languages fetch on build.
+ */
+export function detectSetupCommands(root: string): string[] {
+  const pkgPath = join(root, "package.json")
+  if (!existsSync(pkgPath)) return []
+  let pkg: { packageManager?: string } = {}
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, "utf8"))
+  } catch {
+    pkg = {}
+  }
+  const pm = detectPackageManager(root, pkg)
+  switch (pm) {
+    case "bun":
+      return ["bun install --frozen-lockfile"]
+    case "pnpm":
+      return ["pnpm install --frozen-lockfile"]
+    case "yarn":
+      return ["yarn install --frozen-lockfile"]
+    default:
+      return [existsSync(join(root, "package-lock.json")) ? "npm ci" : "npm install"]
+  }
+}
+
+export type SetupOverride = string | string[] | false | undefined
+
+/** Precedence: CLI override > repository/user config > auto detection. `false` disables setup. */
+export function resolveSetupCommands(root: string, config: SetupOverride, override: SetupOverride): string[] {
+  const value = override !== undefined ? override : config !== undefined ? config : detectSetupCommands(root)
+  if (value === false) return []
+  const list = typeof value === "string" ? [value] : value
+  return list.map((c) => c.trim()).filter(Boolean)
+}
+
 export interface VerifyOverrides {
   test?: string | false
   lint?: string | false

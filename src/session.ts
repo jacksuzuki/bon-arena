@@ -37,6 +37,14 @@ export type CandidateResult = z.infer<typeof CandidateResultSchema>
 export const PlayerStatusSchema = z.enum(["pending", "running", "completed", "failed", "stopped"])
 export type PlayerStatus = z.infer<typeof PlayerStatusSchema>
 
+export const SetupResultSchema = z.object({
+  commands: z.array(z.string()),
+  passed: z.boolean(),
+  durationMs: z.number(),
+  logPath: z.string(),
+})
+export type SetupResult = z.infer<typeof SetupResultSchema>
+
 export const PlayerSchema = z.object({
   /** Unique within the session. Equals the runner id unless the same runner plays twice. */
   id: z.string(),
@@ -54,6 +62,7 @@ export const PlayerSchema = z.object({
   stderrPath: z.string(),
   exitCodePath: z.string(),
   command: z.string().optional(),
+  setup: SetupResultSchema.optional(),
   result: CandidateResultSchema.optional(),
 })
 export type Player = z.infer<typeof PlayerSchema>
@@ -77,6 +86,8 @@ export const SessionSchema = z.object({
   status: SessionStatusSchema,
   players: z.array(PlayerSchema),
   verify: VerifyCommandsSchema,
+  /** Worktree preparation commands that ran before the runners started. */
+  setup: z.array(z.string()).default([]),
   arenaDir: z.string(),
   startedAt: z.string(),
   finishedAt: z.string().optional(),
