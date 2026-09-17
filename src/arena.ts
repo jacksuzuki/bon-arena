@@ -29,6 +29,7 @@ import { loadConfig } from "./config.ts"
 import { sessionFile } from "./paths.ts"
 import { installSkill } from "./install.ts"
 import { buildRefineContext, defaultTaskMode, renderRefineBrief } from "./refine.ts"
+import { describeHost, detectHost } from "./host.ts"
 
 const HELP = `arena — run coding agents on the same task in isolated git worktrees and compare.
 
@@ -171,8 +172,9 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   const verify = repoInfo ? resolveVerifyCommands(root, loadConfig(root).verify) : {}
   const setup = repoInfo ? resolveSetupCommands(root, loadConfig(root).setup, undefined) : []
   const taskMode = defaultTaskMode(root)
+  const host = detectHost(root)
   if (values.json) {
-    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup, taskMode, refine: taskMode === "refined" }, null, 2))
+    print(JSON.stringify({ repository: repoInfo, repositoryError: repoError, runners, verify, setup, taskMode, refine: taskMode === "refined", host }, null, 2))
     return
   }
   print("Arena doctor")
@@ -195,6 +197,9 @@ async function cmdDoctor(argv: Argv): Promise<void> {
   print("")
   print("task mode")
   print(`  ${taskMode === "refined" ? "refined (host clarifies the request before launching; use simple mode to skip)" : "simple (config refine: false; request is passed verbatim)"}`)
+  print("")
+  print("host")
+  for (const line of describeHost(host)) print(`  ${line}`)
   const missing = runners.filter((r) => !r.available && (r.id === "claude" || r.id === "codex"))
   if (missing.length) process.exitCode = 1
 }

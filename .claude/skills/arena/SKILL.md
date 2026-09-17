@@ -27,6 +27,14 @@ progress, and help the user compare and decide. Never re-implement Core logic.
   guess. That is why the task is refined **before** launch (step 4), never after.
 - Session ids look like `20260917-abc123`. `latest` is accepted everywhere.
 
+## Host requirements
+
+The host does the judgement-heavy work: refining the request, verifying the runners' claims, and
+synthesizing. Run it on a Mythos-class model (Fable 5.1) at effort **high** or above; **Opus 5 at
+medium is the minimum**. Runner models are chosen independently and may be cheaper. `arena doctor`
+detects the live model and effort (from the Claude Code session transcript and `CLAUDE_EFFORT`)
+and prints `⚠` lines when the host is below the minimum.
+
 ## Route on `$ARGUMENTS`
 
 | `$ARGUMENTS` starts with | Do |
@@ -54,10 +62,16 @@ options, never passed to the CLI.
 
 Run `arena doctor --json` in the repository root. Read `runners[]` (id, label, available),
 `verify` (detected test/lint/typecheck commands), `setup` (worktree preparation such as
-`npm ci`, run before the runners start) and `taskMode` (`refined` or `simple`: the default when the
-user did not choose one on the command line). If the repo is not a git repo or has no commits,
-stop and explain. If the working tree is dirty, warn: candidates start from HEAD and will not see
-uncommitted changes.
+`npm ci`, run before the runners start), `taskMode` (`refined` or `simple`: the default when the
+user did not choose one on the command line) and `host` (detected harness, model, effort,
+`warnings[]`). If the repo is not a git repo or has no commits, stop and explain. If the working
+tree is dirty, warn: candidates start from HEAD and will not see uncommitted changes.
+
+If `host.warnings` is non-empty, tell the user before anything else: quote the warnings, name the
+detected model and effort, and say that the comparison and synthesis quality depends on them
+(`/model` and `/effort` change them). Then continue; the user decides whether to proceed. If
+detection failed (`model` or `effort` unknown), state which model you are running as according to
+your own system prompt and continue.
 
 ### 2. Players
 

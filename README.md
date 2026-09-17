@@ -78,6 +78,25 @@ To update, repeat the global install command with the new package/version, then 
 installed `skills/arena` directory from your Claude Code config directory if no longer needed.
 Arena sessions and candidate worktrees are not removed by uninstalling the package.
 
+## Host model recommendation
+
+The `/arena` host does the judgement-heavy work: refining the request into a specification,
+verifying the runners' claims, and synthesizing the final version. Run it on a Mythos-class model
+(Fable 5.1) at effort **high** or above; **Opus 5 at medium is the minimum**. Runner models are
+chosen independently and may be cheaper.
+
+`arena doctor` detects the live host inside Claude Code (session transcript + `CLAUDE_EFFORT`) and
+prints `⚠` warnings when the host is below the minimum; the skill relays them before starting:
+
+```
+host
+  harness    Claude Code (session c8e40442)
+  model      claude-fable-5-1  [session transcript]
+  effort     high  [CLAUDE_EFFORT]
+```
+
+Outside Claude Code the host is reported as not detected and no warning is given.
+
 ## Use from Claude Code
 
 In any git repository:
@@ -237,6 +256,7 @@ src/
   arena.ts            CLI (thin command surface)
   core.ts             start / wait / stop / collect / select / commit / synthesize / adopt / clean
   refine.ts           task refinement brief + specification template (the host does the asking)
+  host.ts             host model/effort detection and minimum-tier warnings (arena doctor)
   session.ts          JSON session state (zod schema)
   config.ts           config.yaml / .arena.yaml
   git/                repository, worktree, diff
