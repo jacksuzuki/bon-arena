@@ -326,7 +326,7 @@ function prepareResume(session, player, log) {
     const logsDir = join(session.arenaDir, "logs");
     mkdirSync(resultsDir, { recursive: true });
     mkdirSync(logsDir, { recursive: true });
-    // The conversation id was either fixed at launch (Claude) or has to be looked up now (Codex).
+    // The conversation id was either fixed at launch (Claude) or has to be looked up now (Codex: its session store, Antigravity: the run's stdout log).
     if (!player.runnerSession && runner.findSessionId) {
         const found = runner.findSessionId({
             cwd: player.worktree,
@@ -342,8 +342,8 @@ function prepareResume(session, player, log) {
         }
     }
     if (!player.runnerSession && (runner.findSessionId || runner.id === "claude")) {
-        throw new Error(`No conversation id known for ${player.label}. The runner's session store has no thread for ${player.worktree}` +
-            ` (sessions started before arena ask existed cannot be resumed).`);
+        throw new Error(`No conversation id known for ${player.label}: the ${runner.id} runner recorded none for ${player.worktree}` +
+            ` (the run may have ended before its conversation started, or it predates arena ask), so it cannot be resumed.`);
     }
     return { runner, resultsDir, logsDir };
 }

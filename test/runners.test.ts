@@ -1,9 +1,10 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { createCustomRunner } from "../src/runners/custom.ts"
+import { createAgyRunner, findAgyConversation } from "../src/runners/agy.ts"
 import { createClaudeRunner } from "../src/runners/claude.ts"
 import { createCodexRunner, findCodexThread } from "../src/runners/codex.ts"
-import { createRunnerRegistry } from "../src/runners/index.ts"
+import { BUILTIN_RUNNER_IDS, createRunnerRegistry } from "../src/runners/index.ts"
 import { buildArenaPrompt } from "../src/runners/prompt.ts"
 import type { AskInput, RunnerInput } from "../src/runners/types.ts"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -52,8 +53,18 @@ test("built-in runners are headless and honour config", () => {
 
 test("registry exposes built-ins plus custom runners, config overrides built-ins", () => {
   const reg = createRunnerRegistry({ runners: { claude: { label: "Claude Opus" }, gemini: { command: "gemini" } }, verify: {} })
-  assert.deepEqual([...reg.keys()], ["claude", "codex", "gemini"])
+  assert.deepEqual([...reg.keys()], ["claude", "codex", "agy", "gemini"])
   assert.equal(reg.get("claude")?.label, "Claude Opus")
+  assert.deepEqual([...BUILTIN_RUNNER_IDS], ["claude", "codex", "agy"])
+  assert.equal(reg.get("agy")?.label, "Antigravity")
+
+  const over = createRunnerRegistry({ runners: { agy: { command: "/opt/agy", label: "Gemini 3", model: "gemini-3-pro", env: { X: "1" } } }, verify: {} })
+  assert.deepEqual([...over.keys()], ["claude", "codex", "agy"])
+  assert.equal(over.get("agy")?.label, "Gemini 3")
+  const inv = over.get("agy")!.invocation(input)
+  assert.equal(inv.command, "/opt/agy")
+  assert.ok(inv.args.join(" ").includes("--model gemini-3-pro"))
+  assert.deepEqual(inv.env, { X: "1" })
 })
 
 test("arena prompt embeds the task verbatim after shared rules", () => {
@@ -126,4 +137,76 @@ test("custom runner supports questions only when askArgs is configured", () => {
   const inv = withAsk.askInvocation!(askInput)
   assert.deepEqual(inv.args, ["ask", "--session", askInput.sessionId, "--prompt-file", "/q.md"])
   assert.equal(inv.promptViaStdin, false)
+})
+
+test("agy runner works inside the worktree headlessly and passes the prompt as one -p= argument", () => {
+  const runner = createAgyRunner({ extraArgs: ["--effort", "high"] })
+  assert.equal(runner.id, "agy")
+  assert.equal(runner.label, "Antigravity")
+  const inv = runner.invocation(input)
+  assert.equal(inv.command, "agy")
+  assert.equal(inv.promptViaStdin, false)
+  assert.equal(inv.sessionId, undefined, "agy cannot pin a conversation id at launch")
+  assert.equal(inv.args[inv.args.indexOf("--add-dir") + 1], "/wt")
+  assert.ok(inv.args.includes("--dangerously-skip-permissions"))
+  assert.match(inv.args[inv.args.indexOf("--print-timeout") + 1]!, /^\d+h$/, "far beyond agy's 5 minute default")
+  assert.equal(inv.args[inv.args.indexOf("--output-format") + 1], "stream-json", "the conversation id is read from stdout")
+  assert.equal(inv.args[inv.args.indexOf("--effort") + 1], "high")
+  assert.equal(inv.args.at(-1), "-p=PROMPT")
+  assert.ok(!inv.args.includes("-p") && !inv.args.includes("--print"), "never the two-argument form")
+
+  // Whatever the prompt looks like, it stays one argument and extraArgs cannot split it.
+  for (const prompt of ["--help me\nwith this", "-p", "line 1\nline 2 with \"quotes\" and $VARS", ""]) {
+    const args = createAgyRunner({ extraArgs: ["--sandbox"] }).invocation({ ...input, prompt }).args
+    assert.deepEqual(args.filter((a) => a.startsWith("-p=")), [`-p=${prompt}`])
+    assert.equal(args.filter((a) => !a.startsWith("-p=") && (a.includes("line 2") || a === "-p" || a.startsWith("--help"))).length, 0)
+  }
+})
+
+test("agy runner reads the conversation id from its stdout log", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "agy-stdout-"))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const log = (name: string, content: string): string => {
+    const path = join(dir, name)
+    writeFileSync(path, content)
+    return path
+  }
+  const stream = (id: string): string =>
+    [
+      `{"event":"init","conversation_id":"${id}","init":{"cwd":"/wt","tools":["run_command"],"permission_mode":"always-proceed"}}`,
+      `{"event":"step_update","step_update":{"conversation_id":"${id}","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"OK"}}`,
+      `{"event":"result","result":{"conversation_id":"${id}","status":"SUCCESS","response":"OK\\n","duration_seconds":2.4,"num_turns":1,"usage":{}}}`,
+    ].join("\n") + "\n"
+  const a = "0b8e2c8a-5d0f-4f0e-9a51-0c1d2e3f4a5b"
+  const b = "7f3d9c1e-2a4b-4c6d-8e0f-112233445566"
+
+  assert.equal(findAgyConversation(log("stream.log", stream(a))), a)
+  assert.equal(findAgyConversation(log("json.log", `{"conversation_id":"${a}","status":"SUCCESS","response":"OK","duration_seconds":2.4,"num_turns":1,"usage":{}}\n`)), a)
+  assert.equal(findAgyConversation(log("killed.log", stream(a).split("\n")[0] + "\n")), a, "the init event alone is enough")
+  assert.equal(findAgyConversation(log("appended.log", stream(a) + stream(b))), b, "the log is appended to: the last run wins")
+  assert.equal(findAgyConversation(log("lost-init.log", stream(a) + stream(b).split("\n")[1] + "\n")), b)
+  assert.equal(findAgyConversation(log("noisy.log", `warning: something\n{"event":"init","conversation_id":"${a}"\n${stream(b)}{"conversation_id": trunc`)), b, "broken lines are skipped")
+
+  assert.equal(findAgyConversation(log("empty.log", "")), null)
+  assert.equal(findAgyConversation(log("text.log", "OK\nconversation_id: nope\n")), null)
+  assert.equal(findAgyConversation(log("no-id.log", '{"event":"init","init":{"cwd":"/wt"}}\n{"conversation_id":42}\n[1,2]\nnull\n')), null)
+  assert.equal(findAgyConversation(join(dir, "missing.log")), null)
+
+  const found = createAgyRunner().findSessionId?.({ cwd: "/wt", startedAt: "2026-09-17T02:00:00.000Z", stdoutPath: join(dir, "stream.log"), stderrPath: join(dir, "x"), resultsDir: dir })
+  assert.equal(found, a)
+})
+
+test("agy runner resumes its conversation inside the worktree with a plain-text answer", () => {
+  const ask: AskInput = { sessionId: "0b8e2c8a-5d0f-4f0e-9a51-0c1d2e3f4a5b", prompt: "-why?\nline 2", promptPath: "/r/q.md", cwd: "/wt/agy", resultsDir: "/r" }
+  const inv = createAgyRunner({ command: "/opt/agy", model: "gemini-3-pro", extraArgs: ["--effort", "high"], env: { X: "1" } }).askInvocation!(ask)
+  assert.equal(inv.command, "/opt/agy")
+  assert.equal(inv.promptViaStdin, false)
+  assert.equal(inv.args[inv.args.indexOf("--conversation") + 1], ask.sessionId)
+  assert.equal(inv.args[inv.args.indexOf("--add-dir") + 1], "/wt/agy")
+  assert.equal(inv.args[inv.args.indexOf("--output-format") + 1], "text", "stdout is the answer")
+  assert.ok(inv.args.includes("--print-timeout"))
+  assert.ok(inv.args.includes("--sandbox"), "the only restriction agy offers; read-only is best effort")
+  assert.ok(inv.args.join(" ").includes("--model gemini-3-pro"))
+  assert.equal(inv.args.at(-1), "-p=-why?\nline 2")
+  assert.deepEqual(inv.env, { X: "1" })
 })

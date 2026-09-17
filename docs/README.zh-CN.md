@@ -21,7 +21,7 @@ Arena Core 是一个小巧、与宿主无关的 CLI。Claude Code 的 `/arena` s
 
 - Node.js >= 22.18（或 Bun；代码只使用与 Node 兼容的 API）
 - git
-- 要参赛的 runner：PATH 中的 `claude`（Claude Code CLI）和/或 `codex`（Codex CLI）
+- 要参赛的 runner 需在 PATH 中：`claude`（Claude Code CLI）、`codex`（Codex CLI）和/或 `agy`（Antigravity CLI）。这三个是内置 runner，其他 CLI 可以通过配置添加
 
 ## 安装
 
@@ -46,7 +46,7 @@ Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到 `npx bo
 
 ### 从 GitHub 或 checkout 使用
 
-编译后的 CLI（`dist/`）已提交到仓库，因此从仓库安装也不需要构建步骤：`npm install -g --install-links github:jacksuzuki/bon-arena`（该参数是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink 并随即删除该克隆）或 `npx --package github:jacksuzuki/bon-arena arena doctor`。可用 `#v0.3.1` 固定版本。开发用：
+编译后的 CLI（`dist/`）已提交到仓库，因此从仓库安装也不需要构建步骤：`npm install -g --install-links github:jacksuzuki/bon-arena`（该参数是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink 并随即删除该克隆）或 `npx --package github:jacksuzuki/bon-arena arena doctor`。可用 `#v0.4.0` 固定版本。开发用：
 
 ```bash
 git clone https://github.com/jacksuzuki/bon-arena.git
@@ -99,6 +99,7 @@ runner 完成后，Claude Code 会等待、运行验证、显示摘要，并**�
 
 ```bash
 arena run --players claude,codex --task "为 API 添加限流"   # simple 模式：文本原样传给 runner
+arena run --players claude,agy --task "为 API 添加限流"     # 内置 runner 任选：claude、codex、agy（Antigravity）
 # 或分步执行
 arena start --players claude,codex --task-file task.md
 arena wait latest
@@ -159,6 +160,9 @@ runners:
     extraArgs: []          # 追加到内置调用之后
   codex:
     command: codex
+  agy:                     # Antigravity CLI
+    command: agy
+    extraArgs: ["--effort", "high"]   # model / label / env 与其他内置 runner 相同
   gemini:                  # 任何 CLI 都可以成为 runner
     command: gemini
     label: Gemini
@@ -208,8 +212,11 @@ arena open latest codex # 在 Orca 中以 diff 方式打开候选的改动文件
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'`（提示词通过 stdin） |
 | Codex  | `codex exec -C <worktree> --sandbox workspace-write -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
 无交互运行无法回答权限确认，因此 Claude 以跳过权限的方式运行；隔离来自专用 worktree，而不是权限系统。每个 runner 由一个分离的 supervisor 进程监管并记录退出码，因此 `arena` 命令可以退出后再回来（`arena wait`、`arena status`）。`arena stop` 会终止整个进程组。
+
+`agy` 不在进程的当前目录中工作，也无法从 stdin 读取提示词，因此 worktree 通过 `--add-dir` 传入，提示词作为单个 `-p=<prompt>` 参数传入。它的 print 模式默认 5 分钟后中止，所以显式指定 `--print-timeout`；输出使用 `stream-json`，因为会话 id 出现在其中（runner 的日志是 NDJSON，而不是纯文本）。
 
 runner 的环境中会去掉 `CLAUDECODE` / `CLAUDE_CODE_*` 变量，这样从 Claude Code 内部启动的 Claude runner 不会误以为自己是嵌套运行。Claude Code 的 auto-memory 以仓库为键，worktree 中的 runner 否则会读写宿主项目的记忆；因此 Claude runner 会传入 `--settings '{"autoMemoryEnabled":false}'` 并设置 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`。
 
@@ -221,10 +228,13 @@ runner 是一次性进程，但它们的会话在进程结束后仍然保留。`
 |---|---|
 | Claude | `claude -p --resume <session-id> --output-format text --permission-mode dontAsk --allowedTools <只读工具列表> --disallowedTools Edit,Write,MultiEdit,NotebookEdit --settings '{"autoMemoryEnabled":false}'` |
 | Codex  | `codex exec resume -c sandbox_mode="read-only" -c approval_policy="never" <thread-id> -` |
+| Antigravity | `agy --conversation <conversation-id> --add-dir <worktree> --sandbox --dangerously-skip-permissions --print-timeout 1h --output-format text -p=<prompt>` |
 
 提问是严格只读的：提示词会如此说明，Claude 被限制为只能使用查看类工具，Codex 使用只读沙箱，并且会在前后比较 worktree 的指纹。如果仍然发生了改动，回答会被标记，在信任之前的结果前应重新运行 `arena collect --player <p>`。`arena ask` 用来理解候选（"这个改动对应规格的哪一条？""为什么这个测试在 Windows 上跳过？"），而不是用来要求修复：修复由宿主在 synthesis 步骤完成。
 
-Claude 的会话 id 在启动时固定（`--session-id`）。Codex 没有这样的参数，因此在运行结束后按 worktree 路径和开始时间在 `$CODEX_HOME/sessions` 中查找 thread id。已 clean 的会话，以及在 `arena ask` 出现之前的版本启动的会话，无法提问。自定义 runner 需要在配置中提供 `askArgs`。
+**Antigravity 是例外：**`agy` 没有只读模式（在 print 模式下，即使 `--mode plan` 或 `--sandbox` 也能写文件），因此对 `agy` 的 player，`arena ask` / `arena review` 的只读只是尽力而为：提示词禁止改动并附加 `--sandbox`，但无法强制。如果 worktree 发生了变化，就会出现上述警告。
+
+Claude 的会话 id 在启动时固定（`--session-id`）。Codex 没有这样的参数，因此在运行结束后按 worktree 路径和开始时间在 `$CODEX_HOME/sessions` 中查找 thread id。Antigravity 同样没有该参数，会话 id 从运行时的 stdout 日志（`stream-json`）中读取。已 clean 的会话，以及在 `arena ask` 出现之前的版本启动的会话，无法提问。自定义 runner 需要在配置中提供 `askArgs`。
 
 ### 让 runner 审阅最终版本（`arena review`）
 
@@ -243,7 +253,7 @@ src/
   session.ts          JSON 会话状态（zod schema）
   config.ts           config.yaml / .arena.yaml
   git/                repository, worktree, diff
-  runners/            ArenaRunner 接口, claude, codex, custom, prompt
+  runners/            ArenaRunner 接口, claude, codex, agy, custom, prompt
   process/            分离的 supervisor + spawn 辅助
   verification/       检测并运行 test/lint/typecheck
   compare/            status, summary, markdown 比较包

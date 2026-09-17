@@ -459,6 +459,19 @@ Claude と同じ共通ルールを渡す。
 
 モデル固有 prompt 差分を極力小さくし、比較条件を揃える。
 
+### Antigravity Runner (`agy`)
+
+Antigravity CLI も組み込み runner として subprocess で実行する（組み込みは Claude / Codex / Antigravity の 3 つ）。
+
+```bash
+agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>
+```
+
+- `agy` はプロセスの cwd では作業しないため、worktree を `--add-dir` で渡す
+- stdin からプロンプトを読めないため、`-p=<prompt>` の 1 引数で渡す
+- print モードは既定で 5 分で打ち切られるため、`--print-timeout` を明示する
+- 会話 ID は起動時に指定できないため、`stream-json` の出力（stdout ログ）から読み取る
+
 ---
 
 ## 10. Runner process management
@@ -702,7 +715,7 @@ final judge
 
 ### runner への質問（`arena ask`）
 
-runner は一回きりのプロセスだが、会話（Claude の session / Codex の thread）はプロセス終了後も残る。
+runner は一回きりのプロセスだが、会話（Claude の session / Codex の thread / Antigravity の conversation）はプロセス終了後も残る。
 比較中に成果物の意図や欠落が読み取れないとき、ホストは `arena ask <id> <player> "<質問>"` で
 その runner 自身の会話を worktree 内で再開し、実装時の文脈を持った本人に答えさせる。
 
@@ -710,13 +723,16 @@ runner は一回きりのプロセスだが、会話（Claude の session / Code
 Claude : 起動時に --session-id <uuid> を固定 → claude -p --resume <uuid>
 Codex  : 実行後に $CODEX_HOME/sessions の session_meta (cwd, 開始時刻) から thread id を特定
          → codex exec resume <thread-id>
+agy    : 実行時の stdout ログ (--output-format stream-json) の conversation_id を読む
+         → agy --conversation <id> --add-dir <worktree> -p=<prompt>
 custom : 設定の askArgs ({{sessionId}} {{prompt}} {{promptFile}} {{cwd}})
 ```
 
 質問は読み取り専用。プロンプトで明示し、Claude は閲覧系ツールのみ (`--permission-mode dontAsk`
 + allow/deny list)、Codex は `sandbox_mode="read-only"` で再開する。さらに worktree の
 フィンガープリント（HEAD + 作業ツリー全体の tree hash）を前後で比較し、変化していれば回答に
-警告を付ける（collect 済みの結果が古くなるため）。回答は `results/<player>.ask-<n>.md` に保存し、
+警告を付ける（collect 済みの結果が古くなるため）。Antigravity (`agy`) には読み取り専用モードが無い
+ため、`--sandbox` とプロンプトの規則によるベストエフォートで、この変更検知が頼りになる。回答は `results/<player>.ask-<n>.md` に保存し、
 セッションの `players[].asks[]` に記録し、`arena compare` のバンドルに含める。
 
 「直させる」（差し戻し）は意図的に含めない。修正はホストが synthesis で行う。
@@ -804,7 +820,8 @@ arena/
 │   ├── runners/
 │   │   ├── types.ts
 │   │   ├── claude.ts
-│   │   └── codex.ts
+│   │   ├── codex.ts
+│   │   └── agy.ts
 │   │
 │   ├── process/
 │   │   └── spawn.ts
@@ -885,6 +902,9 @@ runners:
 
   codex:
     command: codex
+
+  agy:
+    command: agy
 
 verify:
   test: bun test

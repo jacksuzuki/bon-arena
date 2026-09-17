@@ -1,7 +1,7 @@
 {
   "name": "bon-arena",
-  "version": "0.3.1",
-  "description": "Run multiple coding agents (Claude Code, Codex CLI, ...) on the same task in isolated git worktrees and compare the results.",
+  "version": "0.4.0",
+  "description": "Run multiple coding agents (Claude Code, Codex CLI, Antigravity CLI, ...) on the same task in isolated git worktrees and compare the results.",
   "type": "module",
   "license": "MIT",
   "author": "Shuichi Suzuki",

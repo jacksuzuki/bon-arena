@@ -21,7 +21,7 @@ Arena Core はハーネスに依存しない小さな CLI です。Claude Code �
 
 - Node.js >= 22.18（または Bun。Node 互換 API のみ使用）
 - git
-- 対戦させる runner: `claude`（Claude Code CLI）や `codex`（Codex CLI）が PATH にあること
+- 対戦させる runner が PATH にあること: `claude`（Claude Code CLI）、`codex`（Codex CLI）、`agy`（Antigravity CLI）。この 3 つが組み込みで、それ以外の CLI も設定で追加できます
 
 ## インストール
 
@@ -46,7 +46,7 @@ Claude Code の skill は PATH 上の `arena` を呼び、無ければ `npx bon-
 
 ### GitHub や checkout から使う
 
-コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/bon-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/bon-arena arena doctor` です。`#v0.3.1` でバージョンを固定できます。開発用:
+コンパイル済みの CLI（`dist/`）をコミットしているので、リポジトリからもビルド無しでインストールできます。`npm install -g --install-links github:jacksuzuki/bon-arena`（このフラグは必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除します）または `npx --package github:jacksuzuki/bon-arena arena doctor` です。`#v0.4.0` でバージョンを固定できます。開発用:
 
 ```bash
 git clone https://github.com/jacksuzuki/bon-arena.git
@@ -99,6 +99,7 @@ runner の完了後、Claude Code は待機し、検証を実行してサマリ�
 
 ```bash
 arena run --players claude,codex --task "API にレート制限を追加"   # simple モード: 文面をそのまま runner へ
+arena run --players claude,agy --task "API にレート制限を追加"     # 組み込みはどれでも: claude, codex, agy（Antigravity）
 # あるいは段階的に
 arena start --players claude,codex --task-file task.md
 arena wait latest
@@ -159,6 +160,9 @@ runners:
     extraArgs: []          # 組み込みの起動コマンドに追加
   codex:
     command: codex
+  agy:                     # Antigravity CLI
+    command: agy
+    extraArgs: ["--effort", "high"]   # model / label / env も他の組み込みと同じ
   gemini:                  # 任意の CLI を runner にできる
     command: gemini
     label: Gemini
@@ -210,8 +214,11 @@ runner の隔離はそのまま機能し、`orca` CLI が無い・失敗した�
 |---|---|
 | Claude | `claude -p --dangerously-skip-permissions --output-format text --settings '{"autoMemoryEnabled":false}'`（プロンプトは stdin） |
 | Codex  | `codex exec -C <worktree> --sandbox workspace-write -c approval_policy="never" -o <results>/codex.last-message.md -` |
+| Antigravity | `agy --add-dir <worktree> --dangerously-skip-permissions --print-timeout 12h --output-format stream-json -p=<prompt>` |
 
 ヘッドレス実行では権限の確認に答えられないため、Claude は権限チェックをスキップして動きます。隔離は権限システムではなく専用の worktree によるものです。各 runner は detached な supervisor プロセスに監視され、exit code が記録されるので、`arena` コマンドは終了してあとから戻れます（`arena wait`、`arena status`）。`arena stop` はプロセスグループ全体を終了します。
+
+`agy` はプロセスのカレントディレクトリでは作業せず、stdin からプロンプトを読むこともできません。そのため worktree を `--add-dir` で、プロンプトを `-p=<prompt>` の 1 引数で渡します。print モードは既定で 5 分で打ち切られるので `--print-timeout` を明示し、会話 ID が出力に含まれる `stream-json` で起動します（runner のログはプレーンテキストではなく NDJSON になります）。
 
 runner の環境からは `CLAUDECODE` / `CLAUDE_CODE_*` を取り除くので、Claude Code 内から起動した Claude runner が「入れ子」と誤認することはありません。Claude Code の auto-memory はリポジトリ単位なので、worktree 内の runner はそのままではホストプロジェクトのメモリを読み書きしてしまいます。そのため Claude runner は `--settings '{"autoMemoryEnabled":false}'` を渡し、`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` を設定します。
 
@@ -223,10 +230,13 @@ runner は一回きりのプロセスですが、会話はプロセスの終了�
 |---|---|
 | Claude | `claude -p --resume <session-id> --output-format text --permission-mode dontAsk --allowedTools <読み取り専用の一覧> --disallowedTools Edit,Write,MultiEdit,NotebookEdit --settings '{"autoMemoryEnabled":false}'` |
 | Codex  | `codex exec resume -c sandbox_mode="read-only" -c approval_policy="never" <thread-id> -` |
+| Antigravity | `agy --conversation <conversation-id> --add-dir <worktree> --sandbox --dangerously-skip-permissions --print-timeout 1h --output-format text -p=<prompt>` |
 
 質問は厳密に読み取り専用です。プロンプトでそう指示し、Claude は閲覧系ツールに、Codex は read-only サンドボックスに制限し、さらに worktree のフィンガープリントを前後で比較します。それでも変更があった場合は回答に警告が付くので、以前の結果を信用する前に `arena collect --player <p>` をやり直してください。`arena ask` は候補を理解するためのもの（「この変更は仕様のどの項目？」「なぜこのテストは Windows でスキップ？」）で、修正を頼むためのものではありません。修正は synthesis ステップでホストが行います。
 
-Claude の会話 ID は起動時に固定します（`--session-id`）。Codex にはそのフラグがないため、実行後に `$CODEX_HOME/sessions` を worktree のパスと開始時刻で検索して thread id を特定します。worktree を clean したセッションや、`arena ask` 実装前のバージョンで開始したセッションには質問できません。custom runner には設定の `askArgs` が必要です。
+**Antigravity は例外です。** `agy` には読み取り専用モードが無い（print モードでは `--mode plan` でも `--sandbox` でもファイルを書けます）ため、`agy` の player に対する `arena ask` / `arena review` の読み取り専用はベストエフォートです。プロンプトで変更を禁じ `--sandbox` を付けますが、強制はできません。worktree が変わった場合は上記の警告が出ます。
+
+Claude の会話 ID は起動時に固定します（`--session-id`）。Codex にはそのフラグがないため、実行後に `$CODEX_HOME/sessions` を worktree のパスと開始時刻で検索して thread id を特定します。Antigravity にもそのフラグはなく、会話 ID は実行時の stdout ログ（`stream-json`）から読み取ります。worktree を clean したセッションや、`arena ask` 実装前のバージョンで開始したセッションには質問できません。custom runner には設定の `askArgs` が必要です。
 
 ### 最終版を runner にレビューさせる（`arena review`）
 
@@ -245,7 +255,7 @@ src/
   session.ts          JSON セッション状態 (zod スキーマ)
   config.ts           config.yaml / .arena.yaml
   git/                repository, worktree, diff
-  runners/            ArenaRunner インターフェース, claude, codex, custom, prompt
+  runners/            ArenaRunner インターフェース, claude, codex, agy, custom, prompt
   process/            detached supervisor + spawn ヘルパー
   verification/       test/lint/typecheck の検出と実行
   compare/            status, summary, Markdown 比較バンドル
