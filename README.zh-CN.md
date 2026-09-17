@@ -28,12 +28,12 @@ Arena Core 是一个小巧、与宿主无关的 CLI。Claude Code 的 `/arena` s
 一条命令，无需 checkout（需要 Node.js >= 22.18 和 npm）：
 
 ```bash
-npm install -g github:jacksuzuki/ccc-arena
+npm install -g --install-links github:jacksuzuki/ccc-arena
 arena install-skill
 arena doctor         # 在你要工作的项目中运行
 ```
 
-编译后的 CLI（`dist/`）已提交到仓库，因此安装不需要构建步骤，也不需要 devDependencies。可用 `#v0.1.0` 或 `#<commit>` 固定版本。更新时再次运行同一命令，然后执行 `arena install-skill --force`。卸载请运行 `npm uninstall -g ccc-arena`，如不再需要，可从 Claude Code 配置目录中删除 `skills/arena`。卸载包不会删除 arena 的会话和候选 worktree。如果安装后找不到 `arena`，请把 npm 的全局 bin 目录加入 PATH（macOS/Linux 为 `$(npm prefix -g)/bin`，Windows 为 `npm prefix -g`）。
+编译后的 CLI（`dist/`）已提交到仓库，因此安装不需要构建步骤，也不需要 devDependencies。`--install-links` 是必需的：没有它，npm 10 会把 git 包安装为指向临时克隆的 symlink，并随即删除该克隆，导致 `arena` 链接失效。可用 `#v0.1.0` 或 `#<commit>` 固定版本。不需要该参数的替代方案是 GitHub 的归档 tarball（`npm install -g https://github.com/jacksuzuki/ccc-arena/archive/refs/heads/main.tar.gz`），但它会安装整个仓库而不只是打包文件。更新时再次运行同一命令，然后执行 `arena install-skill --force`。卸载请运行 `npm uninstall -g ccc-arena`，如不再需要，可从 Claude Code 配置目录中删除 `skills/arena`。卸载包不会删除 arena 的会话和候选 worktree。如果安装后找不到 `arena`，请把 npm 的全局 bin 目录加入 PATH（macOS/Linux 为 `$(npm prefix -g)/bin`，Windows 为 `npm prefix -g`）。
 
 ### 免安装使用（npx）
 
@@ -42,7 +42,7 @@ npx --package github:jacksuzuki/ccc-arena arena doctor
 npx --package github:jacksuzuki/ccc-arena arena run --players claude,codex --task "为 API 添加限流"
 ```
 
-首次运行会克隆并缓存该包。Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到这种 npx 形式，但全局安装更快，并且可以不经确认直接使用 `/arena`。
+每次运行都会重新解析 git 包（约 5 秒开销）。Claude Code 的 skill 从 PATH 调用 `arena`，找不到时会回退到这种 npx 形式，但全局安装更快，并且可以不经确认直接使用 `/arena`。
 
 ### 从 checkout 使用（开发）
 

@@ -30,13 +30,17 @@ other hosts (Codex, standalone use, other harnesses) can drive the same CLI.
 One command, no checkout (Node.js >= 22.18 and npm):
 
 ```bash
-npm install -g github:jacksuzuki/ccc-arena
+npm install -g --install-links github:jacksuzuki/ccc-arena
 arena install-skill
 arena doctor         # run in the project you want to work on
 ```
 
 The compiled CLI (`dist/`) is committed, so the install needs no build step and no dev
-dependencies. Pin a version with `#v0.1.0` or `#<commit>`. To update, run the same command again
+dependencies. `--install-links` matters: without it npm 10 installs a git package as a symlink to
+a temporary clone that it deletes right away, leaving a dangling `arena`. Pin a version with
+`#v0.1.0` or `#<commit>`. An alternative that needs no flag is GitHub's archive tarball
+(`npm install -g https://github.com/jacksuzuki/ccc-arena/archive/refs/heads/main.tar.gz`), which
+installs the whole repository instead of just the packaged files. To update, run the same command again
 and then `arena install-skill --force`. To uninstall, run `npm uninstall -g ccc-arena` and remove
 `skills/arena` from your Claude Code config directory if no longer needed. Arena sessions and
 candidate worktrees are not removed by uninstalling the package. If `arena` is not found after
@@ -50,9 +54,9 @@ npx --package github:jacksuzuki/ccc-arena arena doctor
 npx --package github:jacksuzuki/ccc-arena arena run --players claude,codex --task "Add rate limiting"
 ```
 
-The first run clones and caches the package. The Claude Code skill calls `arena` from PATH and
-falls back to this npx form when it is missing, but the global install is faster and lets you use
-`/arena` without any prompt.
+Each run re-resolves the git package (about 5 s of overhead). The Claude Code skill calls `arena`
+from PATH and falls back to this npx form when it is missing, but the global install is faster and
+lets you use `/arena` without any prompt.
 
 ### From a checkout (development)
 

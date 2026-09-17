@@ -15,7 +15,7 @@ progress, and help the user compare and decide. Never re-implement Core logic.
 
 - Every arena command is non-interactive and safe to run from Bash. Use `arena` from PATH. If it is
   missing, use `npx --yes --package github:jacksuzuki/ccc-arena arena` in its place for this session
-  and tell the user to install it permanently with `npm install -g github:jacksuzuki/ccc-arena`
+  and tell the user to install it permanently with `npm install -g --install-links github:jacksuzuki/ccc-arena`
   (then `arena install-skill`), checking that the npm global bin directory is in PATH.
 - Never edit files inside an arena worktree while runners are working, and never `cd` into one to
   "help" a runner. The only exception is the Synthesize step below, on the selected base candidate's

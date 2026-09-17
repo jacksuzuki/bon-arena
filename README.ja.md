@@ -28,12 +28,12 @@ Arena Core はハーネスに依存しない小さな CLI です。Claude Code �
 checkout 不要、1コマンドです（Node.js >= 22.18 と npm が必要）。
 
 ```bash
-npm install -g github:jacksuzuki/ccc-arena
+npm install -g --install-links github:jacksuzuki/ccc-arena
 arena install-skill
 arena doctor         # 作業したいプロジェクトで実行
 ```
 
-コンパイル済みの CLI（`dist/`）をコミットしているので、インストールにビルド工程も devDependencies も不要です。`#v0.1.0` や `#<commit>` でバージョンを固定できます。更新は同じコマンドを再実行し、続けて `arena install-skill --force` を実行します。アンインストールは `npm uninstall -g ccc-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。
+コンパイル済みの CLI（`dist/`）をコミットしているので、インストールにビルド工程も devDependencies も不要です。`--install-links` は必須です。付けないと npm 10 は git パッケージを一時 clone への symlink として配置し、その clone を直後に削除するため `arena` がリンク切れになります。`#v0.1.0` や `#<commit>` でバージョンを固定できます。フラグ不要の代替として GitHub の archive tarball（`npm install -g https://github.com/jacksuzuki/ccc-arena/archive/refs/heads/main.tar.gz`）も使えますが、パッケージ対象ファイルだけでなくリポジトリ全体が配置されます。更新は同じコマンドを再実行し、続けて `arena install-skill --force` を実行します。アンインストールは `npm uninstall -g ccc-arena` を実行し、不要なら Claude Code の設定ディレクトリから `skills/arena` を削除します。arena のセッションと候補の worktree はパッケージのアンインストールでは削除されません。インストール後に `arena` が見つからない場合は、npm のグローバル bin ディレクトリを PATH に追加してください（macOS/Linux は `$(npm prefix -g)/bin`、Windows は `npm prefix -g`）。
 
 ### インストールなしで使う（npx）
 
@@ -42,7 +42,7 @@ npx --package github:jacksuzuki/ccc-arena arena doctor
 npx --package github:jacksuzuki/ccc-arena arena run --players claude,codex --task "API にレート制限を追加"
 ```
 
-初回はパッケージを clone してキャッシュします。Claude Code の skill は PATH 上の `arena` を呼び、無ければこの npx 形式にフォールバックしますが、グローバルインストールの方が速く、`/arena` を確認なしで使えます。
+実行のたびに git パッケージを解決し直すため、毎回 5 秒ほどのオーバーヘッドがあります。Claude Code の skill は PATH 上の `arena` を呼び、無ければこの npx 形式にフォールバックしますが、グローバルインストールの方が速く、`/arena` を確認なしで使えます。
 
 ### checkout から使う（開発用）
 
