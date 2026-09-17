@@ -47,6 +47,24 @@ GitHub リポジトリ作成、push、npm publish、履歴書き換えは実施�
 検索結果そのものを無確認で公開しない。`rg` の終了コード 1 は一致なしを意味する。
 この監査書自体には検索語や例があるため、追加後の再実行ではそれらも一致する。
 
+### クイックチェック（grep）
+
+網羅的な走査の前に、追跡ファイルと履歴の差分を手早く確認する。いずれも一致なし（終了コード 1）が期待値。
+一致した場合は `token accounting`（設計書）、`Add password reset`（テストの固定文）のような自然言語かを確認する。
+
+```bash
+git ls-files
+git log --all --format='%h %an <%ae> %cn <%ce> %s'
+git log --all --name-only --pretty=format: | sort -u | grep -E -i '(^|/)\.env|\.pem$|\.key$|\.p12$|\.pfx$|id_rsa|id_ed25519|credentials|secrets?\.(json|ya?ml)|\.npmrc|\.netrc'
+git grep -n -i -E 'sk-ant-|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_|gho_|AKIA[0-9A-Z]{16}|xox[baprs]-|-----BEGIN [A-Z ]*PRIVATE KEY|api[_-]?key|secret|token|password|passwd|Authorization:' -- . ':!package-lock.json'
+git log -p --all --format='commit %h' | grep -n -i -E '^[+-].*(sk-ant-|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_|AKIA[0-9A-Z]{16}|xox[baprs]-|-----BEGIN [A-Z ]*PRIVATE KEY|api[_-]?key\s*[:=]|secret\s*[:=]|token\s*[:=]|password\s*[:=]|Authorization:)'
+git grep -n -o -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . ':!package-lock.json'
+git log -p --all --format='commit %h' | grep -o -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' | sort -u
+git grep -n -E '(/Users/|/home/|C:\\\\|/private/|/var/folders|\b[0-9]{1,3}(\.[0-9]{1,3}){3}\b|\.local\b|\.internal\b|ngrok|localhost:[0-9]+)' -- . ':!package-lock.json'
+git rev-list --objects --all | git cat-file --batch-check='%(objecttype) %(objectsize) %(rest)' | awk '$1=="blob" && $2>100000'
+npm pack --dry-run
+```
+
 ### 対象・コミット本文・差分
 
 ```bash
@@ -181,8 +199,23 @@ git check-ignore --no-index .env.example .env.test.example .claude/skills/arena/
 
 ## 人間向けの残タスク
 
-1. 作者メールを含む既存履歴の公開可否を決める。変更する場合は push 前に履歴全体を処理し、再監査する。
-2. ソース・文書の権利を最終確認する。外部から持ち込んだコードがある場合は、その出所と表示条件を確認する。
-3. この監査書を公開物に残すか決める。削除するなら公開対象の最初の commit に入れる前に判断する。
-4. ネットワークが使える環境で `npm run test:package` を完走させる。
-5. 最終変更をレビューし、公開対象の branch / tag とファイルを再走査する。人間が `jacksuzuki/ccc-arena` を作成して push し、Actions の成功を確認する。
+1. **git author のメールアドレス**（全コミットの author / committer に同一の Gmail アドレス）の公開可否を決める。
+   公開後は `git log` と GitHub のコミットページで誰でも閲覧できる。隠す場合は push 前に
+   `git filter-repo --mailmap` などで履歴を書き換え、再監査する（本作業のスコープ外）。置換先は GitHub の
+   noreply アドレス（`<id>+jacksuzuki@users.noreply.github.com`）が一般的。書き換えない場合は、GitHub
+   アカウントにこのアドレスを登録しておくとコミットがアカウントに紐づく。
+2. **`Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` トレーラー**（複数コミット）と、arena が生成した
+   コミット本文の日本語タスク文（`9c80a7a`, `0fc2e1e`）: 公開して問題はないが、整理するなら 1. と同時に行う。
+3. **push するのは `main` だけにする。** ローカルには arena が作った ref（`arena/20260917-*/{claude,codex}`）が
+   残っている。`git push -u origin main` を使い、`git push --all` や `--mirror` は使わない。不要な arena
+   ブランチは `git branch -D arena/...` で消してよい。
+4. ソース・文書・AI 生成物の権利を最終確認する。外部から持ち込んだコードがある場合は、その出所と表示条件を確認する。
+5. この監査書を公開物に残すか決める。削除するなら公開対象の最初の commit に入れる前に判断する。
+6. **GitHub 側の設定**: リポジトリ作成後に Description / Topics を設定し、`package.json` の `homepage`
+   （`https://github.com/jacksuzuki/ccc-arena#readme`）が実在することを確認する。Actions を有効にすると
+   `ci.yml` が最初の push で走るので成功を確認する。
+7. **配布方法**: `npm install -g github:jacksuzuki/ccc-arena` は動かない（`prepare` の `tsc` が devDependencies
+   なしで実行され失敗することを `git+file://` で実測）。README は clone + `npm link` と `.tgz` を案内している。
+   npm に publish したら README の Install 節を更新する。
+8. ネットワークが使える環境で `npm run test:package` を完走させる。
+9. 最終変更をレビューし、公開対象の branch / tag とファイルを再走査してから push する。

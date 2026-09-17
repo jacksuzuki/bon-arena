@@ -50,7 +50,9 @@ npm install -g ./ccc-arena-0.1.0.tgz
 arena install-skill
 ```
 
-The archive provides the `arena` command without a checkout or a local TypeScript build. git is
+The archive provides the `arena` command without a checkout or a local TypeScript build. Installing
+straight from GitHub (`npm install -g github:jacksuzuki/ccc-arena`) does **not** work: npm runs the
+`prepare` build without the dev dependencies, so `tsc` is missing. Use a clone or the archive. git is
 still required when running arenas because candidate implementations use git worktrees.
 If `arena` is not found after installation, add the npm global bin directory to PATH
 (`$(npm prefix -g)/bin` on macOS/Linux, `npm prefix -g` on Windows).
